@@ -375,7 +375,11 @@ impl RegistryState {
                 );
                 // Identify the offending parameter
                 for (key, value) in &query {
-                    let test_query: Vec<(&str, &str)> = query.iter().filter(|&&(k, _)| k != *key).collect();
+                    let test_query: Vec<(&str, &str)> = query
+                        .iter()
+                        .filter(|&&(k, _)| k != *key)
+                        .map(|&(k, v)| (k, v))
+                        .collect();
                     if connection
                         .call::<&[u8]>(
                             Method::GET,
@@ -393,7 +397,7 @@ impl RegistryState {
                 }
                 einval!()
             })?;
-    
+
         Ok(token_resp)
     }
 
