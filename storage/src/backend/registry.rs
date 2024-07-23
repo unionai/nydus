@@ -336,9 +336,9 @@ impl RegistryState {
             ("password", self.password.as_str()),
             ("client_id", REGISTRY_CLIENT_ID),
         ];
-
+    
         let mut headers = HeaderMap::new();
-
+    
         // Insert the basic auth header to ensure the compatibility (e.g. Harbor registry)
         // of fetching token by HTTP GET method.
         // This refers containerd implementation: https://github.com/containerd/containerd/blob/dc7dba9c20f7210c38e8255487fc0ee12692149d/remotes/docker/auth/fetch.go#L187
@@ -348,7 +348,17 @@ impl RegistryState {
                 format!("Basic {}", auth).parse().unwrap(),
             );
         }
-
+    
+        // Print out the GET request details
+        let query_string: Vec<String> = query.iter().map(|(k, v)| format!("{}={}", k, v)).collect();
+        let curl_command = format!(
+            "curl -X GET '{}' -H 'Authorization: Basic {}' -d '{}'",
+            auth.realm,
+            self.auth.as_deref().unwrap_or(""),
+            query_string.join("&")
+        );
+        println!("Invoke the following curl command:\n{}", curl_command);
+    
         let token_resp = connection
             .call::<&[u8]>(
                 Method::GET,
@@ -363,9 +373,27 @@ impl RegistryState {
                     "failed to request registry auth server by GET method: {:?}",
                     e
                 );
+                // Identify the offending parameter
+                for (key, value) in &query {
+                    let test_query: Vec<(&str, &str)> = query.iter().filter(|&&(k, _)| k != *key).collect();
+                    if connection
+                        .call::<&[u8]>(
+                            Method::GET,
+                            auth.realm.as_str(),
+                            Some(&test_query),
+                            None,
+                            &mut headers,
+                            true,
+                        )
+                        .is_ok()
+                    {
+                        warn!("The offending parameter is: {}={}", key, value);
+                        break;
+                    }
+                }
                 einval!()
             })?;
-
+    
         Ok(token_resp)
     }
 
