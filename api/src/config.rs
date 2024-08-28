@@ -102,16 +102,19 @@ impl ConfigV2 {
             return false;
         }
         if let Some(backend_cfg) = self.backend.as_ref() {
+            log::info!("validating backend config: {:?}", backend_cfg);
             if !backend_cfg.validate() {
                 return false;
             }
         }
         if let Some(cache_cfg) = self.cache.as_ref() {
+            log::info!("validating cache config: {:?}", cache_cfg);
             if !cache_cfg.validate() {
                 return false;
             }
         }
         if let Some(rafs_cfg) = self.rafs.as_ref() {
+            log::info!("validating rafs config: {:?}", rafs_cfg);
             if !rafs_cfg.validate() {
                 return false;
             }
