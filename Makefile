@@ -17,7 +17,7 @@ DOCKER ?= "true"
 CARGO ?= $(shell which cargo)
 CARGO_BUILD_GEARS = -v ~/.ssh/id_rsa:/root/.ssh/id_rsa -v ~/.cargo/git:/root/.cargo/git -v ~/.cargo/registry:/root/.cargo/registry
 SUDO = $(shell which sudo)
-CARGO_COMMON ?= 
+CARGO_COMMON ?=
 
 EXCLUDE_PACKAGES =
 UNAME_M := $(shell uname -m)
