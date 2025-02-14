@@ -652,7 +652,7 @@ impl Connection {
         let mut cb = Client::builder()
             .timeout(timeout)
             .connect_timeout(connect_timeout)
-            .redirect(Policy::none());
+            .redirect(Policy::limited(2));
 
         if config.skip_verify {
             cb = cb.danger_accept_invalid_certs(true);

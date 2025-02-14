@@ -308,7 +308,7 @@ impl RegistryState {
                 Method::POST,
                 auth.realm.as_str(),
                 None,
-                Some(ReqBody::Form(form)),
+                None,
                 &mut HeaderMap::new(),
                 true,
             )
