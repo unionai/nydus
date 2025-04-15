@@ -10,6 +10,11 @@ use std::fmt::Debug;
 use std::io::Result;
 use std::sync::Arc;
 
+use aws_config::default_provider::credentials::DefaultCredentialsChain;
+use aws_config::provider_config::ProviderConfig;
+use aws_config::Region;
+use aws_credential_types::provider::ProvideCredentials;
+use aws_credential_types::Credentials;
 use hmac::{Hmac, Mac};
 use http::Uri;
 use nydus_api::S3Config;
@@ -18,6 +23,7 @@ use reqwest::header::HeaderMap;
 use reqwest::Method;
 use sha2::{Digest, Sha256};
 use time::{format_description, OffsetDateTime};
+use tokio::runtime::Runtime;
 
 use crate::backend::connection::{Connection, ConnectionConfig};
 use crate::backend::object_storage::{ObjectStorage, ObjectStorageState};
@@ -26,18 +32,18 @@ const EMPTY_SHA256: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495
 const HEADER_HOST: &str = "Host";
 const HEADER_AWZ_DATE: &str = "x-amz-date";
 const HEADER_AWZ_CONTENT_SHA256: &str = "x-amz-content-sha256";
+const HEADER_AWZ_SECURITY_TOKEN: &str = "x-amz-security-token";
 const S3_DEFAULT_ENDPOINT: &str = "s3.amazonaws.com";
 
 #[derive(Debug)]
 pub struct S3State {
     region: String,
-    access_key_id: String,
-    access_key_secret: String,
     scheme: String,
     object_prefix: String,
     endpoint: String,
     bucket_name: String,
     retry_limit: u8,
+    credentials: Credentials,
 }
 
 /// Storage backend to access data stored in S3.
@@ -55,15 +61,41 @@ impl S3 {
             s3_config.endpoint.clone()
         };
 
+        // If explicit access credentials are provided, use those directly.
+        // Otherwise, try to obtain credentials through the AWS credential chain
+        // (environment variables, instance metadata, etc.)
+        let credentials =
+            if !s3_config.access_key_id.is_empty() && !s3_config.access_key_secret.is_empty() {
+                Ok(Credentials::new(
+                    s3_config.access_key_id.clone(),
+                    s3_config.access_key_secret.clone(),
+                    None,
+                    None,
+                    "static",
+                ))
+            } else {
+                let rt = Runtime::new().unwrap();
+                let region = Region::new(s3_config.region.clone());
+                let provider_config = ProviderConfig::empty().with_region(Some(region));
+                rt.block_on(async {
+                    DefaultCredentialsChain::builder()
+                        .configure(provider_config)
+                        .build()
+                        .await
+                        .provide_credentials()
+                        .await
+                        .map_err(|e| einval!(e))
+                })
+            };
+
         let state = Arc::new(S3State {
             region: s3_config.region.clone(),
             scheme: s3_config.scheme.clone(),
             object_prefix: s3_config.object_prefix.clone(),
             endpoint: final_endpoint,
-            access_key_id: s3_config.access_key_id.clone(),
-            access_key_secret: s3_config.access_key_secret.clone(),
             bucket_name: s3_config.bucket_name.clone(),
             retry_limit,
+            credentials: credentials.unwrap(),
         });
         let metrics = id.map(|i| BackendMetrics::new(i, "oss"));
 
@@ -133,7 +165,7 @@ impl S3State {
     // under apache 2.0 license
     pub fn get_signing_key(&self, date: &OffsetDateTime) -> Vec<u8> {
         let mut key: Vec<u8> = b"AWS4".to_vec();
-        key.extend(self.access_key_secret.as_bytes());
+        key.extend(self.credentials.secret_access_key().as_bytes());
 
         let date_key = hmac_hash(key.as_slice(), to_signer_date(date).as_bytes());
         let date_region_key = hmac_hash(date_key.as_slice(), self.region.as_bytes());
@@ -186,6 +218,15 @@ impl ObjectStorageState for S3State {
             HEADER_AWZ_CONTENT_SHA256,
             EMPTY_SHA256.parse().map_err(|e| einval!(e))?,
         );
+
+        // Add session token header if present
+        if let Some(session_token) = self.credentials.session_token() {
+            headers.insert(
+                HEADER_AWZ_SECURITY_TOKEN,
+                session_token.parse().map_err(|e| einval!(e))?,
+            );
+        }
+
         let scope = format!(
             "{}/{}/{}/aws4_request",
             to_signer_date(&date),
@@ -211,7 +252,10 @@ impl ObjectStorageState for S3State {
         let signature = hmac_hash_hex(signing_key.as_slice(), string_to_sign.as_bytes());
         let authorization = format!(
             "AWS4-HMAC-SHA256 Credential={}/{}, SignedHeaders={}, Signature={}",
-            self.access_key_id, scope, signed_headers, signature
+            self.credentials.access_key_id(),
+            scope,
+            signed_headers,
+            signature
         );
         headers.insert(
             "Authorization",
@@ -264,25 +308,30 @@ fn to_awz_date(date: &OffsetDateTime) -> String {
 
 #[cfg(test)]
 mod tests {
-    use http::{HeaderMap, Method};
-    use nydus_api::S3Config;
-
     use crate::backend::object_storage::ObjectStorageState;
     use crate::backend::s3::S3State;
     use crate::backend::BlobBackend;
+    use aws_credential_types::Credentials;
+    use http::{HeaderMap, Method};
+    use nydus_api::S3Config;
 
     use super::S3;
 
     fn get_test_s3_state() -> (S3State, String, String) {
         let state = S3State {
             region: "us-east-1".to_string(),
-            access_key_id: "test-key".to_string(),
-            access_key_secret: "test-key-secret".to_string(),
             scheme: "http".to_string(),
             object_prefix: "test-prefix-".to_string(),
             endpoint: "localhost:9000".to_string(),
             bucket_name: "test-bucket".to_string(),
             retry_limit: 6,
+            credentials: Credentials::new(
+                "test-key".to_string(),
+                "test-key-secret".to_string(),
+                None,
+                None,
+                "static",
+            ),
         };
         let (resource, url) = state.url("test-object", &["a=b", "c=d"]);
         (state, resource, url)
