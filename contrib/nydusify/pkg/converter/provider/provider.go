@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -24,11 +25,13 @@ import (
 	"github.com/containerd/containerd/v2/core/remotes/docker"
 	"github.com/containerd/errdefs"
 	"github.com/containerd/platforms"
-	"github.com/dragonflyoss/nydus/contrib/nydusify/pkg/utils"
+	nydusifyutils "github.com/dragonflyoss/nydus/contrib/nydusify/pkg/utils"
 	"github.com/goharbor/acceleration-service/pkg/cache"
 	accelcontent "github.com/goharbor/acceleration-service/pkg/content"
 	"github.com/goharbor/acceleration-service/pkg/remote"
+	"github.com/goharbor/acceleration-service/pkg/utils"
 	"github.com/opencontainers/go-digest"
+	"github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -50,6 +53,7 @@ type Provider struct {
 	pushRetryDelay time.Duration
 	localSource    string
 	localTarget    string
+	statusTracker  docker.StatusTracker
 }
 
 // New creates a Provider with optional custom content.Store override.
@@ -81,6 +85,7 @@ func New(root string, hosts remote.HostFunc, cacheSize uint, cacheVersion string
 		chunkSize:      chunkSize,
 		pushRetryCount: 3,
 		pushRetryDelay: 5 * time.Second,
+		statusTracker:  docker.NewInMemoryTracker(),
 	}, nil
 }
 
@@ -106,7 +111,7 @@ func newDefaultClient(skipTLSVerify bool) *http.Client {
 	}
 }
 
-func newResolver(insecure, plainHTTP bool, credFunc remote.CredentialFunc, chunkSize int64) remotes.Resolver {
+func newResolver(insecure, plainHTTP bool, credFunc remote.CredentialFunc, chunkSize int64, tracker docker.StatusTracker) remotes.Resolver {
 	registryHosts := docker.ConfigureDefaultRegistries(
 		docker.WithAuthorizer(
 			docker.NewDockerAuthorizer(
@@ -122,7 +127,8 @@ func newResolver(insecure, plainHTTP bool, credFunc remote.CredentialFunc, chunk
 	)
 
 	return docker.NewResolver(docker.ResolverOptions{
-		Hosts: registryHosts,
+		Hosts:   registryHosts,
+		Tracker: tracker,
 	})
 }
 
@@ -135,7 +141,7 @@ func (pvd *Provider) Resolver(ref string) (remotes.Resolver, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newResolver(insecure, pvd.usePlainHTTP, credFunc, pvd.chunkSize), nil
+	return newResolver(insecure, pvd.usePlainHTTP, credFunc, pvd.chunkSize, pvd.statusTracker), nil
 }
 
 // Implements the acceleration service Provider Pull
@@ -211,8 +217,73 @@ func (pvd *Provider) Push(ctx context.Context, desc ocispec.Descriptor, ref stri
 		logrus.Infof("exporting target image to %s", pvd.localTarget)
 		return pvd.localPush(ctx, desc, ref, pvd.localTarget)
 	}
+
 	logrus.Infof("pushing target image to %s", ref)
-	return pvd.remotePush(ctx, desc, ref)
+	if err := pvd.remotePush(ctx, desc, ref); err != nil {
+		return err
+	}
+
+	// If Subject was set in the manifest, check that it was accepted by the registry.
+	// Otherwise, fall back to tag based
+	status, err := pvd.statusTracker.GetStatus(remotes.MakeRefKey(ctx, desc))
+	if err != nil {
+		return err
+	}
+
+	if status.SubjectDigest == "" {
+		manifest, err := readManifest(ctx, pvd.ContentStore(), desc)
+		if err != nil {
+			return err
+		}
+		if manifest.Subject != nil {
+			logrus.Infof("registry does not support referrers, falling back to tag based for %s", ref)
+			return pvd.pushReferrersIndex(ctx, desc, ref, *manifest.Subject)
+		}
+	}
+
+	return nil
+}
+
+func (pvd *Provider) pushReferrersIndex(ctx context.Context, referrerDesc ocispec.Descriptor, referrerRef string, subjDesc ocispec.Descriptor) error {
+	index := ocispec.Index{
+		Versioned: specs.Versioned{
+			SchemaVersion: 2,
+		},
+		MediaType:    ocispec.MediaTypeImageIndex,
+		ArtifactType: "",
+		Manifests:    []ocispec.Descriptor{referrerDesc},
+	}
+
+	desc := &ocispec.Descriptor{
+		MediaType: index.MediaType,
+	}
+
+	ref := trimTag(referrerRef) + ":" + strings.ReplaceAll(subjDesc.Digest.String(), ":", "-")
+
+	desc, err := utils.WriteJSON(ctx, pvd.ContentStore(), &index, *desc, ref, nil)
+	if err != nil {
+		return err
+	}
+
+	return pvd.remotePush(ctx, *desc, ref)
+}
+
+func trimTag(ref string) string {
+	i := strings.LastIndex(ref, ":")
+	if i > -1 {
+		ref = ref[:i]
+	}
+	return ref
+}
+
+func readManifest(ctx context.Context, cs content.Store, desc ocispec.Descriptor) (ocispec.Manifest, error) {
+	var manifest ocispec.Manifest
+	_, err := utils.ReadJSON(ctx, cs, &manifest, desc)
+	if err != nil {
+		return ocispec.Manifest{}, err
+	}
+
+	return manifest, nil
 }
 
 func (pvd *Provider) localPush(ctx context.Context, desc ocispec.Descriptor, ref string, path string) error {
@@ -238,7 +309,7 @@ func (pvd *Provider) remotePush(ctx context.Context, desc ocispec.Descriptor, re
 		MaxConcurrentUploadedLayers: LayerConcurrentLimit,
 	}
 
-	err = utils.WithRetry(func() error {
+	err = nydusifyutils.WithRetry(func() error {
 		return push(ctx, pvd.store, rc, desc, ref)
 	}, pvd.pushRetryCount, pvd.pushRetryDelay)
 
