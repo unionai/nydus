@@ -129,4 +129,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/containerd/containerd/v2 => github.com/nydusaccelerator/containerd/v2 v2.0.0-20250528024712-b96732f49d37
+replace github.com/containerd/containerd/v2 => github.com/unionai/containerd/v2 v2.0.0-20260115182712-dc4bde7b8a02
