@@ -109,7 +109,7 @@ impl Algorithm {
 
 impl fmt::Display for Algorithm {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -735,7 +735,7 @@ mod tests {
         assert!(Algorithm::try_from(Algorithm::Aes256Gcm as u64).is_ok());
         assert!(Algorithm::try_from(u64::MAX).is_err());
 
-        println!("{:?},{:?},{:?},{:?}", none, aes128xts, aes256xts, aes256gcm);
+        println!("{none:?},{aes128xts:?},{aes256xts:?},{aes256gcm:?}");
     }
 
     #[test]

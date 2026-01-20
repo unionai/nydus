@@ -57,29 +57,29 @@ impl fmt::Display for HttpProxyError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             HttpProxyError::ParseStringToInteger(e) => {
-                write!(f, "failed to parse string to integer, {}", e)
+                write!(f, "failed to parse string to integer, {e}")
             }
             HttpProxyError::ParseContentLengthFromHeader(e) => {
-                write!(f, "failed to parse content length from header, {}", e)
+                write!(f, "failed to parse content length from header, {e}")
             }
-            HttpProxyError::LocalRequest(e) => write!(f, "failed to get response, {}", e),
-            HttpProxyError::RemoteRequest(e) => write!(f, "failed to get response, {}", e),
+            HttpProxyError::LocalRequest(e) => write!(f, "failed to get response, {e}"),
+            HttpProxyError::RemoteRequest(e) => write!(f, "failed to get response, {e}"),
             HttpProxyError::BuildTokioRuntime(e) => {
-                write!(f, "failed to build tokio runtime, {}", e)
+                write!(f, "failed to build tokio runtime, {e}")
             }
             HttpProxyError::BuildHttpRequest(e) => {
-                write!(f, "failed to build http request, {}", e)
+                write!(f, "failed to build http request, {e}")
             }
             HttpProxyError::Transport(e) => {
-                write!(f, "failed to transport remote response body, {}", e)
+                write!(f, "failed to transport remote response body, {e}")
             }
             HttpProxyError::ReadResponseBody(e) => {
-                write!(f, "failed to read response body, {}", e)
+                write!(f, "failed to read response body, {e}")
             }
-            HttpProxyError::CopyBuffer(e) => write!(f, "failed to copy buffer, {}", e),
+            HttpProxyError::CopyBuffer(e) => write!(f, "failed to copy buffer, {e}"),
             HttpProxyError::InvalidPath => write!(f, "invalid path"),
             HttpProxyError::ConstructHeader(e) => {
-                write!(f, "failed to construct request header, {}", e)
+                write!(f, "failed to construct request header, {e}")
             }
         }
     }
@@ -133,7 +133,7 @@ enum Uri {
 fn range_str_for_header(offset: u64, len: Option<usize>) -> String {
     match len {
         Some(len) => format!("bytes={}-{}", offset, offset + len as u64 - 1),
-        None => format!("bytes={}-", offset),
+        None => format!("bytes={offset}-"),
     }
 }
 
@@ -254,7 +254,7 @@ impl BlobReader for HttpProxyReader {
                     range
                         .as_str()
                         .parse()
-                        .map_err(|e| HttpProxyError::ConstructHeader(format!("{}", e)))?,
+                        .map_err(|e| HttpProxyError::ConstructHeader(format!("{e}")))?,
                 );
                 let mut resp = connection
                     .call::<&[u8]>(Method::GET, uri.as_str(), None, None, &mut headers, true)
@@ -409,13 +409,13 @@ mod tests {
             ),
             hyper::Method::GET => {
                 let range = req.headers()[http::header::RANGE].to_str().unwrap();
-                println!("range: {}", range);
+                println!("range: {range}");
                 let (start, end) = parse_range_header(range);
                 let length = match end {
                     Some(e) => e - start + 1,
                     None => CONTENT.len() as u64,
                 };
-                println!("start: {}, end: {:?}, length: {}", start, end, length);
+                println!("start: {start}, end: {end:?}, length: {length}");
                 let end = match end {
                     Some(e) => e,
                     None => (CONTENT.len() - 1) as u64,
@@ -492,8 +492,7 @@ mod tests {
         let test_list: Vec<(String, String)> = vec![
             (
                 format!(
-                    "{{\"addr\":\"{}\",\"path\":\"/namespace/<repo>/blobs\"}}",
-                    SOCKET_PATH,
+                    "{{\"addr\":\"{SOCKET_PATH}\",\"path\":\"/namespace/<repo>/blobs\"}}",
                 ),
                 "test-local-http-proxy".to_string(),
             ),
@@ -513,7 +512,7 @@ mod tests {
             let blob_size = reader
                 .blob_size()
                 .map_err(|e| {
-                    println!("blob_size() failed: {}", e);
+                    println!("blob_size() failed: {e}");
                     e
                 })
                 .unwrap();
@@ -525,7 +524,7 @@ mod tests {
             let size = reader
                 .try_read(&mut buf, 0)
                 .map_err(|e| {
-                    println!("read() range failed: {}", e);
+                    println!("read() range failed: {e}");
                     e
                 })
                 .unwrap();
@@ -538,7 +537,7 @@ mod tests {
             let size = reader
                 .try_read(&mut buf, 0)
                 .map_err(|e| {
-                    println!("read() range failed: {}", e);
+                    println!("read() range failed: {e}");
                     e
                 })
                 .unwrap();

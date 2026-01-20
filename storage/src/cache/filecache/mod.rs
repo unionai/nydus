@@ -156,7 +156,7 @@ impl BlobCacheMgr for FileCacheMgr {
             }
         }
 
-        self.blobs.read().unwrap().len() == 0
+        self.blobs.read().unwrap().is_empty()
     }
 
     fn backend(&self) -> &dyn BlobBackend {
@@ -275,8 +275,7 @@ impl FileCacheEntry {
                 file.set_len(cached_file_size)?;
             } else if cached_file_size != 0 && file_size != cached_file_size {
                 let msg = format!(
-                    "blob data file size doesn't match: got 0x{:x}, expect 0x{:x}",
-                    file_size, cached_file_size
+                    "blob data file size doesn't match: got 0x{file_size:x}, expect 0x{cached_file_size:x}"
                 );
                 return Err(einval!(msg));
             }
@@ -392,7 +391,7 @@ impl FileCacheEntry {
             Arc::new(BlobStateMap::from(DigestedChunkMap::new()))
         } else {
             Arc::new(BlobStateMap::from(IndexedChunkMap::new(
-                &format!("{}{}", blob_file, BLOB_DATA_FILE_SUFFIX),
+                &format!("{blob_file}{BLOB_DATA_FILE_SUFFIX}"),
                 blob_info.chunk_count(),
                 true,
             )?))
@@ -416,10 +415,9 @@ pub mod blob_cache_tests {
         let s = format!(
             r###"
         {{
-            "work_dir": {:?}
+            "work_dir": {dir:?}
         }}
         "###,
-            dir
         );
 
         let mut blob_config: FileCacheConfig = serde_json::from_str(&s).unwrap();

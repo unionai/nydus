@@ -74,15 +74,14 @@ impl ConfigV2 {
         let content = format!(
             r#"
         version = 2
-        id = "{}"
+        id = "{id}"
         backend.type = "localfs"
-        backend.localfs.dir = "{}"
+        backend.localfs.dir = "{dir}"
         cache.type = "filecache"
         cache.compressed = false
         cache.validate = false
-        cache.filecache.work_dir = "{}"
+        cache.filecache.work_dir = "{dir}"
         "#,
-            id, dir, dir
         );
 
         Self::from_str(&content)
@@ -92,10 +91,7 @@ impl ConfigV2 {
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let md = fs::metadata(path.as_ref())?;
         if md.len() > 0x100000 {
-            return Err(Error::new(
-                ErrorKind::Other,
-                "configuration file size is too big",
-            ));
+            return Err(Error::other("configuration file size is too big"));
         }
         let content = fs::read_to_string(path)?;
         Self::from_str(&content)
@@ -1241,7 +1237,7 @@ impl TryFrom<&BackendConfig> for BackendConfigV2 {
             v => {
                 return Err(Error::new(
                     ErrorKind::InvalidInput,
-                    format!("unsupported backend type '{}'", v),
+                    format!("unsupported backend type '{v}'"),
                 ))
             }
         }
@@ -1307,7 +1303,7 @@ impl TryFrom<&CacheConfig> for CacheConfigV2 {
             t => {
                 return Err(Error::new(
                     ErrorKind::InvalidInput,
-                    format!("unsupported cache type '{}'", t),
+                    format!("unsupported cache type '{t}'"),
                 ))
             }
         }

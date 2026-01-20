@@ -140,11 +140,11 @@ impl From<Error> for DaemonErrorKind {
     fn from(e: Error) -> Self {
         use Error::*;
         match e {
-            UpgradeManager(e) => DaemonErrorKind::UpgradeManager(format!("{:?}", e)),
+            UpgradeManager(e) => DaemonErrorKind::UpgradeManager(format!("{e:?}")),
             NotReady => DaemonErrorKind::NotReady,
             Unsupported => DaemonErrorKind::Unsupported,
             Serde(e) => DaemonErrorKind::Serde(e),
-            UnexpectedEvent(e) => DaemonErrorKind::UnexpectedEvent(format!("{:?}", e)),
+            UnexpectedEvent(e) => DaemonErrorKind::UnexpectedEvent(format!("{e:?}")),
             o => DaemonErrorKind::Other(o.to_string()),
         }
     }
@@ -184,8 +184,7 @@ impl FromStr for FsBackendType {
             "passthroughfs" => Ok(FsBackendType::PassthroughFs),
             "passthrough_fs" => Ok(FsBackendType::PassthroughFs),
             o => Err(Error::InvalidArguments(format!(
-                "only 'rafs' and 'passthrough_fs' are supported, but {} was specified",
-                o
+                "only 'rafs' and 'passthrough_fs' are supported, but {o} was specified"
             ))),
         }
     }
@@ -193,7 +192,7 @@ impl FromStr for FsBackendType {
 
 impl Display for FsBackendType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -217,8 +216,7 @@ pub fn validate_threads_configuration<V: AsRef<str>>(v: V) -> std::result::Resul
             Ok(t)
         } else {
             Err(format!(
-                "invalid thread number {}, valid range: [1-1024]",
-                t
+                "invalid thread number {t}, valid range: [1-1024]"
             ))
         }
     } else {

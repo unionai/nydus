@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::io::{Error, ErrorKind, Result};
+use std::io::{Error, Result};
 use std::os::unix::io::AsRawFd;
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender};
@@ -92,7 +92,7 @@ pub(crate) fn error_response(error: HttpError, status: StatusCode) -> Response {
     let mut response = Response::new(Version::Http11, status);
     let err_msg = ErrorMessage {
         code: "UNDEFINED".to_string(),
-        message: format!("{:?}", error),
+        message: format!("{error:?}"),
     };
     response.set_body(Body::new(err_msg));
     response
@@ -170,7 +170,9 @@ fn kick_api_server(
     from_api: &Receiver<ApiResponse>,
     request: ApiRequest,
 ) -> ApiResponse {
-    to_api.send(Some(request)).map_err(ApiError::RequestSend)?;
+    to_api
+        .send(Some(request))
+        .map_err(|err| ApiError::RequestSend(Box::new(err)))?;
     from_api.recv().map_err(ApiError::ResponseRecv)?
 }
 
@@ -250,7 +252,7 @@ pub fn start_http_thread(
         if let ServerError::IOError(e) = e {
             e
         } else {
-            Error::new(ErrorKind::Other, format!("{:?}", e))
+            Error::other(format!("{e:?}"))
         }
     })?;
     poll.registry().register(

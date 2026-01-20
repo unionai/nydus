@@ -51,7 +51,7 @@ lazy_static! {
                 .build();
         match runtime {
             Ok(v) => Arc::new(v),
-            Err(e) => panic!("failed to create tokio async runtime, {}", e),
+            Err(e) => panic!("failed to create tokio async runtime, {e}"),
         }
     };
 }

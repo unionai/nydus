@@ -76,18 +76,18 @@ pub enum BackendError {
 impl fmt::Display for BackendError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            BackendError::Unsupported(s) => write!(f, "{}", s),
-            BackendError::CopyData(e) => write!(f, "failed to copy data, {}", e),
+            BackendError::Unsupported(s) => write!(f, "{s}"),
+            BackendError::CopyData(e) => write!(f, "failed to copy data, {e}"),
             #[cfg(feature = "backend-registry")]
-            BackendError::Registry(e) => write!(f, "{:?}", e),
+            BackendError::Registry(e) => write!(f, "{e:?}"),
             #[cfg(feature = "backend-localfs")]
-            BackendError::LocalFs(e) => write!(f, "{}", e),
+            BackendError::LocalFs(e) => write!(f, "{e}"),
             #[cfg(any(feature = "backend-oss", feature = "backend-s3"))]
-            BackendError::ObjectStorage(e) => write!(f, "{}", e),
+            BackendError::ObjectStorage(e) => write!(f, "{e}"),
             #[cfg(feature = "backend-localdisk")]
-            BackendError::LocalDisk(e) => write!(f, "{:?}", e),
+            BackendError::LocalDisk(e) => write!(f, "{e:?}"),
             #[cfg(feature = "backend-http-proxy")]
-            BackendError::HttpProxy(e) => write!(f, "{}", e),
+            BackendError::HttpProxy(e) => write!(f, "{e}"),
         }
     }
 }
@@ -140,7 +140,7 @@ pub trait BlobReader: Send + Sync {
                         ERROR_HOLDER
                             .lock()
                             .unwrap()
-                            .push(&format!("{:?}", err))
+                            .push(&format!("{err:?}"))
                             .unwrap_or_else(|_| error!("Failed when try to hold error"));
                         return Err(err);
                     }

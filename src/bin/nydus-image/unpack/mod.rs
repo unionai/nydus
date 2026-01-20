@@ -131,7 +131,7 @@ impl OCITarBuilderFactory {
                 .truncate(true)
                 .read(false)
                 .open(output_path)
-                .with_context(|| format!("fail to open output file {:?}", output_path))?,
+                .with_context(|| format!("fail to open output file {output_path:?}"))?,
         );
 
         Ok(builder)

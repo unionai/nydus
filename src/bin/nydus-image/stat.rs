@@ -282,7 +282,7 @@ impl ImageStat {
             .create(true)
             .write(true)
             .open(path)
-            .with_context(|| format!("Output file {:?} can't be opened", path))?;
+            .with_context(|| format!("Output file {path:?} can't be opened"))?;
 
         serde_json::to_writer(w, self).context("Write output file failed")?;
 

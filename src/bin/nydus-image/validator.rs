@@ -35,9 +35,9 @@ impl Validator {
         let pre = &mut |t: &Tree| -> Result<()> {
             let node = t.borrow_mut_node();
             if verbosity {
-                println!("inode: {}", node);
+                println!("inode: {node}");
                 for chunk in &node.chunks {
-                    println!("\t chunk: {}", chunk);
+                    println!("\t chunk: {chunk}");
                 }
             }
             Ok(())

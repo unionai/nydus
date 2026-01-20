@@ -29,7 +29,7 @@ pub enum Algorithm {
 
 impl fmt::Display for Algorithm {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -217,7 +217,7 @@ impl AsRef<[u8]> for RafsDigest {
 impl fmt::Display for RafsDigest {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for c in &self.data {
-            write!(f, "{:02x}", c)?;
+            write!(f, "{c:02x}")?;
         }
         Ok(())
     }
@@ -225,7 +225,7 @@ impl fmt::Display for RafsDigest {
 
 impl From<RafsDigest> for String {
     fn from(d: RafsDigest) -> Self {
-        format!("{}", d)
+        format!("{d}")
     }
 }
 
@@ -331,7 +331,7 @@ mod test {
         let d2 = RafsDigest::from(d1.data);
         let s1: String = d1.into();
         let s2: String = d2.into();
-        print!("{:?}", d1);
+        print!("{d1:?}");
         assert_eq!(s1, s2);
         print!("{:?}, {:?}", Algorithm::Blake3, Algorithm::Sha256);
     }

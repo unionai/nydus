@@ -107,12 +107,12 @@ pub fn setup_logging(
         let basename = path
             .file_stem()
             .ok_or_else(|| {
-                eprintln!("invalid file name input {:?}", path);
+                eprintln!("invalid file name input {path:?}");
                 einval!()
             })?
             .to_str()
             .ok_or_else(|| {
-                eprintln!("invalid file name input {:?}", path);
+                eprintln!("invalid file name input {path:?}");
                 einval!()
             })?;
         spec = spec.basename(basename);
@@ -120,7 +120,7 @@ pub fn setup_logging(
         // `flexi_logger` automatically add `.log` suffix if the file name has no extension.
         if let Some(suffix) = path.extension() {
             let suffix = suffix.to_str().ok_or_else(|| {
-                eprintln!("invalid file extension {:?}", suffix);
+                eprintln!("invalid file extension {suffix:?}");
                 einval!()
             })?;
             spec = spec.suffix(suffix);
@@ -158,7 +158,7 @@ pub fn setup_logging(
         }
 
         logger.start().map_err(|e| {
-            eprintln!("{:?}", e);
+            eprintln!("{e:?}");
             eother!(e)
         })?;
     } else {

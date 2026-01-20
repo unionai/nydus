@@ -32,13 +32,13 @@ pub enum ObjectStorageError {
 impl fmt::Display for ObjectStorageError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ObjectStorageError::Auth(e) => write!(f, "failed to generate auth info, {}", e),
-            ObjectStorageError::Request(e) => write!(f, "network communication error, {}", e),
+            ObjectStorageError::Auth(e) => write!(f, "failed to generate auth info, {e}"),
+            ObjectStorageError::Request(e) => write!(f, "network communication error, {e}"),
             ObjectStorageError::ConstructHeader(e) => {
-                write!(f, "failed to generate HTTP header, {}", e)
+                write!(f, "failed to generate HTTP header, {e}")
             }
-            ObjectStorageError::Transport(e) => write!(f, "network communication error, {}", e),
-            ObjectStorageError::Response(s) => write!(f, "network communication error, {}", s),
+            ObjectStorageError::Transport(e) => write!(f, "network communication error, {e}"),
+            ObjectStorageError::Response(s) => write!(f, "network communication error, {s}"),
         }
     }
 }
@@ -99,11 +99,11 @@ where
         Ok(content_length
             .to_str()
             .map_err(|err| {
-                ObjectStorageError::Response(format!("invalid content length: {:?}", err))
+                ObjectStorageError::Response(format!("invalid content length: {err:?}"))
             })?
             .parse::<u64>()
             .map_err(|err| {
-                ObjectStorageError::Response(format!("invalid content length: {:?}", err))
+                ObjectStorageError::Response(format!("invalid content length: {err:?}"))
             })?)
     }
 
@@ -112,14 +112,14 @@ where
         let (resource, url) = self.state.url(&self.blob_id, query);
         let mut headers = HeaderMap::new();
         let end_at = offset + buf.len() as u64 - 1;
-        let range = format!("bytes={}-{}", offset, end_at);
+        let range = format!("bytes={offset}-{end_at}");
 
         headers.insert(
             "Range",
             range
                 .as_str()
                 .parse()
-                .map_err(|e| ObjectStorageError::ConstructHeader(format!("{}", e)))?,
+                .map_err(|e| ObjectStorageError::ConstructHeader(format!("{e}")))?,
         );
         self.state
             .sign(Method::GET, &mut headers, resource.as_str(), url.as_str())

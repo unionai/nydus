@@ -314,7 +314,7 @@ pub mod tests {
         let t1 = thread::Builder::new()
             .spawn(move || {
                 for i in 0..100 {
-                    timing_tracer!({ f() }, format!("t1.{}", i).as_str());
+                    timing_tracer!({ f() }, format!("t1.{i}").as_str());
                 }
             })
             .unwrap();
@@ -322,14 +322,14 @@ pub mod tests {
         let t2 = thread::Builder::new()
             .spawn(move || {
                 for i in 0..100 {
-                    timing_tracer!({ f() }, format!("t2.{}", i).as_str());
+                    timing_tracer!({ f() }, format!("t2.{i}").as_str());
                 }
             })
             .unwrap();
         let t3 = thread::Builder::new()
             .spawn(move || {
                 for i in 0..100 {
-                    timing_tracer!({ f() }, format!("t3.{}", i).as_str());
+                    timing_tracer!({ f() }, format!("t3.{i}").as_str());
                 }
             })
             .unwrap();

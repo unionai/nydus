@@ -383,7 +383,7 @@ impl RafsInode for CachedInodeV5 {
             if !self.has_hole() && chunks != self.i_data.len() as u64 {
                 return Err(einval!("invalid chunk count"));
             }
-            let blocks = (self.i_size + 511) / 512;
+            let blocks = self.i_size.div_ceil(512);
             // Old stargz builder generates inode with 0 blocks
             if blocks != self.i_blocks && self.i_blocks != 0 {
                 return Err(einval!("invalid block count"));
@@ -1998,9 +1998,7 @@ mod cached_tests {
             let curr_name = &root_dir.i_child[i].i_name;
             assert!(
                 prev_name <= curr_name,
-                "Children not sorted: {:?} > {:?}",
-                prev_name,
-                curr_name
+                "Children not sorted: {prev_name:?} > {curr_name:?}"
             );
         }
 

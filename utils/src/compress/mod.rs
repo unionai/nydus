@@ -35,7 +35,7 @@ impl fmt::Display for Algorithm {
             Algorithm::GZip => "gzip",
             Algorithm::Zstd => "zstd",
         };
-        write!(f, "{}", output)
+        write!(f, "{output}")
     }
 }
 
@@ -632,7 +632,7 @@ mod tests {
         for algo in algorithms {
             let stringified = algo.to_string();
             let parsed = Algorithm::from_str(&stringified).unwrap();
-            assert_eq!(algo, parsed, "Mismatch for algorithm: {:?}", algo);
+            assert_eq!(algo, parsed, "Mismatch for algorithm: {algo:?}");
         }
     }
 

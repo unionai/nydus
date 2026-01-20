@@ -65,7 +65,7 @@ impl CommandCache {
         let prefetch_data_amount = m["prefetch_data_amount"].as_f64().unwrap();
 
         if raw {
-            println!("{}", metrics);
+            println!("{metrics}");
         } else {
             print!(
                 r#"
@@ -206,7 +206,7 @@ Block Sizes/millis:
         }
 
         if raw {
-            println!("{}", metrics);
+            println!("{metrics}");
         } else {
             let sizes = ["<1K", "1K~", "4K~", "16K~", "64K~", "128K~", "512K~", "1M~"];
             let m = metrics.as_object().unwrap();
@@ -298,7 +298,7 @@ impl CommandFsStats {
         let fop_counter = m["fop_hits"].as_array().unwrap();
         let fop_errors = m["fop_errors"].as_array().unwrap();
         if raw {
-            println!("{}", metrics);
+            println!("{metrics}");
         } else {
             let periods = [
                 "<1ms", "~20ms", "~50ms", "~100ms", "~500ms", "~1s", "~2s", "2s~",
@@ -391,7 +391,7 @@ impl CommandDaemon {
             let i = info.as_object().unwrap();
 
             if raw {
-                println!("{}", info);
+                println!("{info}");
             } else {
                 let version_info = &i["version"];
                 print!(
@@ -416,7 +416,7 @@ Commit:                 {git_commit}
                         for (mount_point, backend_obj) in fs_backends {
                             let backend: FsBackendDescriptor =
                                 serde_json::from_value(backend_obj.clone()).unwrap();
-                            println!("\tInstance Mountpoint:  {}", mount_point);
+                            println!("\tInstance Mountpoint:  {mount_point}");
                             println!("\tType:  {}", backend.backend_type);
                             println!("\tMounted Time:  {}", backend.mounted_time);
                             match backend.backend_type {

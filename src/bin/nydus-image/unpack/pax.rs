@@ -4,7 +4,7 @@ use std::{
     collections::HashMap,
     ffi::OsStr,
     io::{self, Cursor, Error, ErrorKind, Read},
-    iter::{self, repeat},
+    iter::repeat,
     os::unix::prelude::{OsStrExt, OsStringExt},
     path::{Path, PathBuf},
     rc::Rc,
@@ -575,7 +575,7 @@ impl PAXUtil {
 
         header
             .set_link_name(&path)
-            .with_context(|| format!("fail to set header link again for {:?}", path))?;
+            .with_context(|| format!("fail to set header link again for {path:?}"))?;
 
         Ok(Some(extension))
     }
@@ -601,7 +601,7 @@ impl PAXUtil {
 
         header
             .set_path(&path)
-            .with_context(|| format!("fail to set header path again for {:?}", path))?;
+            .with_context(|| format!("fail to set header path again for {path:?}"))?;
 
         Ok(Some(extension))
     }
@@ -682,7 +682,7 @@ impl Util {
         let bs = header.as_bytes();
         let sum = bs[0..offset]
             .iter()
-            .chain(iter::repeat(&b' ').take(len))
+            .chain(std::iter::repeat_n(&b' ', len))
             .chain(&bs[offset + len..])
             .fold(0, |a, b| a + (*b as u32));
 
@@ -690,7 +690,7 @@ impl Util {
         bs[bs.len() - 1] = b' ';
         bs[bs.len() - 2] = 0o0;
 
-        let o = format!("{:o}", sum);
+        let o = format!("{sum:o}");
         let value = o.bytes().rev().chain(repeat(b'0'));
         for (slot, value) in bs.iter_mut().rev().skip(2).zip(value) {
             *slot = value;
@@ -770,7 +770,7 @@ impl Read for ChunkReader {
                     Some(chunk) => self.load_chunk(chunk.as_ref()).map_err(|err| {
                         Error::new(
                             ErrorKind::InvalidData,
-                            format!("fail to load chunk, error: {}", err),
+                            format!("fail to load chunk, error: {err}"),
                         )
                     })?,
                 }

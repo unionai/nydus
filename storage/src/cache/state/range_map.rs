@@ -25,7 +25,7 @@ pub struct BlobRangeMap {
 impl BlobRangeMap {
     /// Create a new instance of `BlobRangeMap`.
     pub fn new(blob_path: &str, count: u32, shift: u32) -> Result<Self> {
-        let filename = format!("{}.{}", blob_path, FILE_SUFFIX);
+        let filename = format!("{blob_path}.{FILE_SUFFIX}");
         debug_assert!(shift < 64);
 
         PersistMap::open(&filename, count, true, true).map(|map| BlobRangeMap { shift, map })
@@ -33,7 +33,7 @@ impl BlobRangeMap {
 
     /// Create a new instance of `BlobRangeMap` from an existing chunk map file.
     pub fn open(blob_id: &str, workdir: &str, count: u32, shift: u32) -> Result<Self> {
-        let filename = format!("{}/{}.{}", workdir, blob_id, FILE_SUFFIX);
+        let filename = format!("{workdir}/{blob_id}.{FILE_SUFFIX}");
         debug_assert!(shift < 64);
 
         PersistMap::open(&filename, count, false, true).map(|map| BlobRangeMap { shift, map })
@@ -185,10 +185,10 @@ mod tests {
             let is_ready = map3.is_range_ready(addr, 1).unwrap();
             if idx % skip_index == 0 {
                 if is_ready {
-                    panic!("indexed chunk map: index {} shouldn't be ready", idx);
+                    panic!("indexed chunk map: index {idx} shouldn't be ready");
                 }
             } else if !is_ready {
-                panic!("indexed chunk map: index {} should be ready", idx);
+                panic!("indexed chunk map: index {idx} should be ready");
             }
         }
     }

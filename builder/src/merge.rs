@@ -137,7 +137,7 @@ impl Merger {
         if let Some(parent_bootstrap_path) = &parent_bootstrap_path {
             let (rs, _) =
                 RafsSuper::load_from_file(parent_bootstrap_path, config_v2.clone(), false)
-                    .context(format!("load parent bootstrap {:?}", parent_bootstrap_path))?;
+                    .context(format!("load parent bootstrap {parent_bootstrap_path:?}"))?;
             let blobs = rs.superblock.get_blob_infos();
             for blob in &blobs {
                 let blob_ctx = BlobContext::from(ctx, &blob, ChunkSource::Parent)?;
@@ -153,7 +153,7 @@ impl Merger {
         let mut config = None;
         if let Some(chunk_dict_path) = &chunk_dict {
             let (rs, _) = RafsSuper::load_from_file(chunk_dict_path, config_v2.clone(), false)
-                .context(format!("load chunk dict bootstrap {:?}", chunk_dict_path))?;
+                .context(format!("load chunk dict bootstrap {chunk_dict_path:?}"))?;
             config = Some(rs.meta.get_config());
             for blob in rs.superblock.get_blob_infos() {
                 chunk_dict_blobs.insert(blob.blob_id().to_string());
@@ -165,7 +165,7 @@ impl Merger {
 
         for (layer_idx, bootstrap_path) in sources.iter().enumerate() {
             let (rs, _) = RafsSuper::load_from_file(bootstrap_path, config_v2.clone(), false)
-                .context(format!("load bootstrap {:?}", bootstrap_path))?;
+                .context(format!("load bootstrap {bootstrap_path:?}"))?;
             config
                 .get_or_insert_with(|| rs.meta.get_config())
                 .check_compatibility(&rs.meta)?;
@@ -434,7 +434,7 @@ mod tests {
         );
         assert!(build_output.is_ok());
         let build_output = build_output.unwrap();
-        println!("BuildOutput: {}", build_output);
+        println!("BuildOutput: {build_output}");
         assert_eq!(build_output.blob_size, Some(16));
     }
 }

@@ -39,7 +39,7 @@ pub enum DaemonState {
 
 impl Display for DaemonState {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 

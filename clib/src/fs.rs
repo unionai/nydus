@@ -63,12 +63,11 @@ fn default_localfs_rafs_config(dir: &str) -> String {
         [backend]
         type = "localfs"
         [backend.localfs]
-        dir = "{}"
+        dir = "{dir}"
         [cache]
         type = "dummycache"
         [rafs]
-        "#,
-        dir
+        "#
     )
 }
 

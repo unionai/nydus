@@ -48,11 +48,11 @@ impl fmt::Display for ConnectionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ConnectionError::Disconnected => write!(f, "network connection disconnected"),
-            ConnectionError::ErrorWithMsg(s) => write!(f, "network error, {}", s),
-            ConnectionError::Common(e) => write!(f, "network error, {}", e),
-            ConnectionError::Format(e) => write!(f, "{}", e),
-            ConnectionError::Url(s, e) => write!(f, "failed to parse URL {}, {}", s, e),
-            ConnectionError::Scheme(s) => write!(f, "invalid scheme {}", s),
+            ConnectionError::ErrorWithMsg(s) => write!(f, "network error, {s}"),
+            ConnectionError::Common(e) => write!(f, "network error, {e}"),
+            ConnectionError::Format(e) => write!(f, "{e}"),
+            ConnectionError::Url(s, e) => write!(f, "failed to parse URL {s}, {e}"),
+            ConnectionError::Scheme(s) => write!(f, "invalid scheme {s}"),
         }
     }
 }

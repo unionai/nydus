@@ -399,7 +399,7 @@ impl Artifact for ArtifactWriter {
         } else if let ArtifactStorage::SingleFile(s) = &self.storage {
             if let Ok(md) = s.metadata() {
                 if md.is_file() {
-                    remove_file(s).with_context(|| format!("failed to remove blob {:?}", s))?;
+                    remove_file(s).with_context(|| format!("failed to remove blob {s:?}"))?;
                 }
             }
         }
@@ -463,12 +463,12 @@ impl BlobCacheGenerator {
     }
 
     pub fn finalize(&self, name: &str) -> Result<()> {
-        let blob_data_name = format!("{}.blob.data", name);
+        let blob_data_name = format!("{name}.blob.data");
         let mut guard = self.blob_data.lock().unwrap();
         guard.finalize(Some(blob_data_name))?;
         drop(guard);
 
-        let blob_meta_name = format!("{}.blob.meta", name);
+        let blob_meta_name = format!("{name}.blob.meta");
         let mut guard = self.blob_meta.lock().unwrap();
         guard.finalize(Some(blob_meta_name))
     }

@@ -409,7 +409,7 @@ fn process_fs_service(
                 "backend": {{
                     "type": "localfs",
                     "config": {{
-                        "dir": {:?},
+                        "dir": {v:?},
                         "readahead": true
                     }}
                 }},
@@ -417,7 +417,7 @@ fn process_fs_service(
                     "type": "blobcache",
                     "config": {{
                         "compressed": false,
-                        "work_dir": {:?}
+                        "work_dir": {v:?}
                     }}
                 }}
             }},
@@ -425,8 +425,7 @@ fn process_fs_service(
             "digest_validate": false,
             "iostats_files": false
         }}
-        "###,
-                    v, v
+        "###
                 )
             }
             None => match args.value_of("config") {

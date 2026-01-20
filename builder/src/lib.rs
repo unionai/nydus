@@ -214,7 +214,7 @@ fn finalize_blob(
 
         let hash = blob_ctx.blob_hash.clone().finalize();
         let blob_meta_id = if ctx.blob_id.is_empty() {
-            format!("{:x}", hash)
+            format!("{hash:x}")
         } else {
             assert!(!ctx.conversion_type.is_to_ref() || is_tarfs);
             ctx.blob_id.clone()
@@ -402,7 +402,7 @@ mod tests {
         let node = builder.create_directory(&target_paths);
         assert!(node.is_ok());
         let node = node.unwrap();
-        println!("Node: {}", node);
+        println!("Node: {node}");
         assert_eq!(node.file_type(), "dir");
         assert_eq!(node.target(), tmp_dir.as_path());
 

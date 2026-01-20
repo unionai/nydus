@@ -11,7 +11,7 @@ use std::convert::{TryFrom, TryInto};
 use std::ffi::{OsStr, OsString};
 use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 use std::fs::OpenOptions;
-use std::io::{Error, ErrorKind, Result};
+use std::io::{Error, Result};
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Component, Path, PathBuf};
 use std::str::FromStr;
@@ -324,7 +324,7 @@ impl Default for RafsSuperFlags {
 
 impl Display for RafsSuperFlags {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        write!(f, "{:?}", self)?;
+        write!(f, "{self:?}")?;
         Ok(())
     }
 }
@@ -824,7 +824,7 @@ impl RafsSuper {
             return Ok(());
         }
 
-        Err(Error::new(ErrorKind::Other, "invalid RAFS superblock"))
+        Err(Error::other("invalid RAFS superblock"))
     }
 
     /// Set meta blob file path from which the `RafsSuper` object is loaded from.

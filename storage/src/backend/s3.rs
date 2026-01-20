@@ -123,8 +123,7 @@ impl S3State {
         content_sha256: &str,
     ) -> String {
         let canonical_request = format!(
-            "{}\n{}\n{}\n{}\n\n{}\n{}",
-            method, uri, query_string, headers, signed_headers, content_sha256
+            "{method}\n{uri}\n{query_string}\n{headers}\n\n{signed_headers}\n{content_sha256}"
         );
         sha256_hash(canonical_request.as_bytes())
     }
@@ -323,7 +322,7 @@ mod tests {
     #[test]
     fn test_s3_state_sign() {
         let (state, resource, url) = get_test_s3_state();
-        println!("{}", url);
+        println!("{url}");
         let mut headers = HeaderMap::new();
         headers.append("Range", "bytes=5242900-".parse().unwrap());
         let result = state.sign(Method::GET, &mut headers, &resource, &url);

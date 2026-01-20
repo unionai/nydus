@@ -32,8 +32,8 @@ pub enum LocalDiskError {
 impl fmt::Display for LocalDiskError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            LocalDiskError::BlobFile(s) => write!(f, "{}", s),
-            LocalDiskError::ReadBlob(s) => write!(f, "{}", s),
+            LocalDiskError::BlobFile(s) => write!(f, "{s}"),
+            LocalDiskError::ReadBlob(s) => write!(f, "{s}"),
         }
     }
 }
@@ -206,7 +206,7 @@ impl LocalDisk {
         };
 
         let device_file = self.device_file.try_clone().map_err(|e| {
-            LocalDiskError::BlobFile(format!("localdisk: can not duplicate file, {}", e))
+            LocalDiskError::BlobFile(format!("localdisk: can not duplicate file, {e}"))
         })?;
         let blob = Arc::new(LocalDiskBlob {
             blob_id: blob_id.to_string(),
@@ -218,7 +218,7 @@ impl LocalDisk {
 
         let mut table_guard = self.entries.write().unwrap();
         if table_guard.contains_key(blob_id) {
-            let msg = format!("localdisk: blob {} already exists", blob_id);
+            let msg = format!("localdisk: blob {blob_id} already exists");
             return Err(LocalDiskError::BlobFile(msg));
         }
         table_guard.insert(blob_id.to_string(), blob);
@@ -259,7 +259,7 @@ impl LocalDisk {
             }
         }
 
-        let msg = format!("localdisk: can not find such blob: {}", blob_id);
+        let msg = format!("localdisk: can not find such blob: {blob_id}");
         Err(LocalDiskError::ReadBlob(msg))
     }
 
@@ -305,7 +305,7 @@ impl LocalDisk {
                 return Err(einval!(msg));
             }
             if table_guard.contains_key(&name) {
-                let msg = format!("localdisk: blob {} already exists", name);
+                let msg = format!("localdisk: blob {name} already exists");
                 return Err(einval!(msg));
             }
 

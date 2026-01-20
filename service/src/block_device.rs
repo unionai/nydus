@@ -118,22 +118,19 @@ impl BlockDevice {
                 .get_blob_extra_info(&blob_id)
                 .ok_or_else(|| {
                     let msg = format!(
-                        "block_device: can not get extra information for blob {}",
-                        blob_id
+                        "block_device: can not get extra information for blob {blob_id}"
                     );
                     enoent!(msg)
                 })?;
             if extra_info.mapped_blkaddr == 0 {
                 let msg = format!(
-                    "block_device: mapped block address for blob {} is zero",
-                    blob_id
+                    "block_device: mapped block address for blob {blob_id} is zero"
                 );
                 return Err(einval!(msg));
             }
             if is_tarfs_mode != blob_info.features().is_tarfs() {
                 let msg = format!(
-                    "block_device: inconsistent `TARFS` mode from meta and data blob {}",
-                    blob_id
+                    "block_device: inconsistent `TARFS` mode from meta and data blob {blob_id}"
                 );
                 return Err(einval!(msg));
             }
@@ -464,7 +461,7 @@ impl BlockDevice {
             let root_digest: String = root_digest
                 .data
                 .iter()
-                .fold(String::new(), |acc, v| acc + &format!("{:02x}", v));
+                .fold(String::new(), |acc, v| acc + &format!("{v:02x}"));
             println!(
                 "dm-verity options: --no-superblock --format=1 -s \"\" --hash=sha256 --data-block-size={} --hash-block-size=4096 --data-blocks {} --hash-offset {} {}",
                 block_device.block_size(), blocks, verity_offset, root_digest

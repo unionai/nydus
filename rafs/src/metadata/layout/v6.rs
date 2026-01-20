@@ -1871,7 +1871,7 @@ impl RafsV6BlobTable {
             return Ok(());
         }
         if blob_table_size as usize % size_of::<RafsV6Blob>() != 0 {
-            let msg = format!("invalid Rafs v6 blob table size {}", blob_table_size);
+            let msg = format!("invalid Rafs v6 blob table size {blob_table_size}");
             return Err(einval!(msg));
         }
 
