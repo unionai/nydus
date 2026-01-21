@@ -491,9 +491,7 @@ mod tests {
         // start the client and test
         let test_list: Vec<(String, String)> = vec![
             (
-                format!(
-                    "{{\"addr\":\"{SOCKET_PATH}\",\"path\":\"/namespace/<repo>/blobs\"}}",
-                ),
+                format!("{{\"addr\":\"{SOCKET_PATH}\",\"path\":\"/namespace/<repo>/blobs\"}}",),
                 "test-local-http-proxy".to_string(),
             ),
             (

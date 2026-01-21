@@ -367,9 +367,7 @@ impl TocIndex {
             bail!("stargz: failed to seek file position to start of TOC");
         }
         let mut toc_index: TocIndex = serde_json::from_reader(index_file).with_context(|| {
-            format!(
-                "stargz: failed to deserialize stargz TOC index file {path:?}"
-            )
+            format!("stargz: failed to deserialize stargz TOC index file {path:?}")
         })?;
 
         if toc_index.version != 1 {
@@ -625,9 +623,7 @@ impl StargzBuilder {
                 let value = base64::engine::general_purpose::STANDARD
                     .decode(value)
                     .with_context(|| {
-                        format!(
-                            "stargz: failed to parse xattr {path:?} for entry {name:?}"
-                        )
+                        format!("stargz: failed to parse xattr {path:?} for entry {name:?}")
                     })?;
                 xattrs.add(OsString::from(name), value)?;
             }

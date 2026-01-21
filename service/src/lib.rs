@@ -6,7 +6,7 @@
 //!
 //! The `nydus-service` crate provides facilities to manage Nydus services, such as:
 //! - `blobfs`: share processed RAFS metadata/data blobs to guest by virtio-fs, so the RAFS
-//!    filesystem can be mounted by EROFS inside guest.
+//!   filesystem can be mounted by EROFS inside guest.
 //! - `blockdev`: compose processed RAFS metadata/data as a block device, so it can be used as
 //!   backend for virtio-blk.
 //! - `fscache`: cooperate Linux fscache subsystem to mount RAFS filesystems by EROFS.
@@ -215,9 +215,7 @@ pub fn validate_threads_configuration<V: AsRef<str>>(v: V) -> std::result::Resul
         if t > 0 && t <= 1024 {
             Ok(t)
         } else {
-            Err(format!(
-                "invalid thread number {t}, valid range: [1-1024]"
-            ))
+            Err(format!("invalid thread number {t}, valid range: [1-1024]"))
         }
     } else {
         Err(format!(
