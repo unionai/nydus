@@ -33,8 +33,8 @@ pub enum LocalFsError {
 impl fmt::Display for LocalFsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            LocalFsError::BlobFile(s) => write!(f, "{}", s),
-            LocalFsError::ReadBlob(s) => write!(f, "{}", s),
+            LocalFsError::BlobFile(s) => write!(f, "{s}"),
+            LocalFsError::ReadBlob(s) => write!(f, "{s}"),
         }
     }
 }

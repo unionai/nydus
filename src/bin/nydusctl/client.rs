@@ -25,7 +25,7 @@ impl NydusdClient {
     }
 
     fn build_uri(&self, path: &str, query: Option<Vec<(&str, &str)>>) -> HyperUri {
-        let mut endpoint = format!("/api/{}", path);
+        let mut endpoint = format!("/api/{path}");
 
         if let Some(q) = query {
             let mut params = String::new();
@@ -33,7 +33,7 @@ impl NydusdClient {
                 params.push_str(&format!("{}={}", p.0, p.1))
             }
 
-            endpoint.push_str(&format!("?{}", params));
+            endpoint.push_str(&format!("?{params}"));
         }
 
         Uri::new(&self.sock_path, endpoint.as_str()).into()
@@ -208,10 +208,8 @@ mod tests {
             let uri = client.build_uri(path, None);
             let uri_str = uri.to_string();
             assert!(
-                uri_str.contains(&format!("/api/{}", path)),
-                "URI should contain /api/{}, got {}",
-                path,
-                uri_str
+                uri_str.contains(&format!("/api/{path}")),
+                "URI should contain /api/{path}, got {uri_str}"
             );
         }
     }

@@ -10,7 +10,7 @@ use nydus_rafs::metadata::{RafsInode, RafsInodeWalkAction};
 use std::any::Any;
 use std::ffi::{CStr, CString, OsStr, OsString};
 use std::fs::metadata;
-use std::io::{Error, ErrorKind, Result, Write};
+use std::io::{Error, Result, Write};
 use std::ops::Deref;
 #[cfg(target_os = "linux")]
 use std::os::linux::fs::MetadataExt;
@@ -120,9 +120,8 @@ impl FuseServer {
 
         loop {
             if let Some((reader, writer)) = self.ch.get_request().map_err(|e| {
-                Error::new(
-                    ErrorKind::Other,
-                    format!("failed to get fuse request from /dev/fuse, {}", e),
+                Error::other(
+                    format!("failed to get fuse request from /dev/fuse, {e}"),
                 )
             })? {
                 if let Err(e) =
@@ -525,7 +524,7 @@ impl NydusDaemon for FusedevDaemon {
         for _ in 0..self.threads_cnt {
             let waker = self.waker.clone();
             self.kick_one_server(waker)
-                .map_err(|e| NydusError::StartService(format!("{}", e)))?;
+                .map_err(|e| NydusError::StartService(format!("{e}")))?;
         }
 
         Ok(())

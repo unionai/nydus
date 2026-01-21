@@ -478,7 +478,7 @@ impl FileCacheEntry {
                 end -= 1;
             }
 
-            assert!(end >= start, "start 0x{:x}, end 0x{:x}", start, end);
+            assert!(end >= start, "start 0x{start:x}, end 0x{end:x}");
             if start == 0 && end == extended_chunks.len() - 1 {
                 extended_chunks
             } else {

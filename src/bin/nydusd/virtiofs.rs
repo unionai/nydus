@@ -317,7 +317,7 @@ where
 
     fn start(&self) -> Result<()> {
         let listener =
-            Listener::new(&self.sock, true).map_err(|e| Error::StartService(format!("{}", e)))?;
+            Listener::new(&self.sock, true).map_err(|e| Error::StartService(format!("{e}")))?;
         let vu_daemon = self.daemon.clone();
         let _ = thread::Builder::new()
             .name("vhost_user_listener".to_string())
@@ -391,7 +391,7 @@ pub fn create_virtiofs_daemon(
         Arc::new(RwLock::new(VhostUserFsBackendHandler::new(vfs.clone())?)),
         GuestMemoryAtomic::new(GuestMemoryMmap::new()),
     )
-    .map_err(|e| Error::VhostUser(format!("{:?}", e)))?;
+    .map_err(|e| Error::VhostUser(format!("{e:?}")))?;
     let (trigger, events_rx) = channel::<DaemonStateMachineInput>();
     let (result_sender, result_receiver) = channel::<Result<()>>();
     let service = VirtioFsService::new(vfs);

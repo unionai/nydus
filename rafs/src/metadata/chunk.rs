@@ -34,11 +34,11 @@ pub enum ChunkWrapper {
 impl Debug for ChunkWrapper {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Self::V5(c) => write!(f, "{:?}", c),
-            Self::V6(c) => write!(f, "{:?}", c),
+            Self::V5(c) => write!(f, "{c:?}"),
+            Self::V6(c) => write!(f, "{c:?}"),
             Self::Ref(c) => {
                 let chunk = to_rafs_v5_chunk_info(as_blob_v5_chunk_info(c.deref()));
-                write!(f, "{:?}", chunk)
+                write!(f, "{chunk:?}")
             }
         }
     }
@@ -63,7 +63,7 @@ impl Display for ChunkWrapper {
         } else {
             base_format
         };
-        write!(f, "{}", full_format)
+        write!(f, "{full_format}")
     }
 }
 
@@ -693,7 +693,7 @@ mod tests {
     fn test_fmt() {
         let wrapper_v5 = ChunkWrapper::Ref(Arc::new(CachedChunkInfoV5::default()));
         assert_eq!(
-            format!("{:?}", wrapper_v5),
+            format!("{wrapper_v5:?}"),
             "RafsV5ChunkInfo { block_id: RafsDigest { data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, blob_index: 0, flags: (empty), compressed_size: 0, uncompressed_size: 0, compressed_offset: 0, uncompressed_offset: 0, file_offset: 0, index: 0, crc32: 0 }"
         );
     }

@@ -66,7 +66,7 @@ impl FsBackendCollection {
         let fs_config = match cmd.fs_type {
             FsBackendType::Rafs => {
                 let cfg = ConfigV2::from_str(&cmd.config)
-                    .map_err(|e| Error::InvalidConfig(format!("{}", e)))?;
+                    .map_err(|e| Error::InvalidConfig(format!("{e}")))?;
                 let cfg = cfg.clone_without_secrets();
                 Some(cfg)
             }
@@ -313,7 +313,7 @@ fn fs_backend_factory(cmd: &FsBackendMountCmd) -> Result<BackFileSystem> {
                             | FsOptions::ZERO_MESSAGE_OPENDIR;
 
                         let passthrough_fs = PassthroughFs::<()>::new(fs_cfg)
-                            .map_err(|e| Error::InvalidConfig(format!("{}", e)))?;
+                            .map_err(|e| Error::InvalidConfig(format!("{e}")))?;
                         passthrough_fs.init(fsopts).map_err(Error::PassthroughFs)?;
 
                         type BoxedLayer = Box<dyn Layer<Inode = u64, Handle = u64> + Send + Sync>;
@@ -332,7 +332,7 @@ fn fs_backend_factory(cmd: &FsBackendMountCmd) -> Result<BackFileSystem> {
                         };
                         let overlayfs =
                             OverlayFs::new(Some(upper_layer), lower_layers, overlay_config)
-                                .map_err(|e| Error::InvalidConfig(format!("{}", e)))?;
+                                .map_err(|e| Error::InvalidConfig(format!("{e}")))?;
                         info!(
                             "init overlay fs inode, upper {}, work {}\n",
                             ovl_conf.upper_dir.clone(),
@@ -340,7 +340,7 @@ fn fs_backend_factory(cmd: &FsBackendMountCmd) -> Result<BackFileSystem> {
                         );
                         overlayfs
                             .import()
-                            .map_err(|e| Error::InvalidConfig(format!("{}", e)))?;
+                            .map_err(|e| Error::InvalidConfig(format!("{e}")))?;
                         info!("Overlay filesystem imported");
                         Ok(Box::new(overlayfs))
                     }

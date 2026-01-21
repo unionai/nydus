@@ -70,7 +70,7 @@ impl FilesystemTreeBuilder {
                 parent.info.explicit_uidgid,
                 true,
             )
-            .with_context(|| format!("failed to create node {:?}", path))?;
+            .with_context(|| format!("failed to create node {path:?}"))?;
             child.layer_idx = layer_idx;
 
             // as per OCI spec, whiteout file should not be present within final image

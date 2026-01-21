@@ -33,7 +33,7 @@ impl std::fmt::Display for DatabaseError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match *self {
             DatabaseError::SqliteError(ref err) => err.fmt(f),
-            DatabaseError::PoisonError(ref err) => write!(f, "PoisonError: {}", err),
+            DatabaseError::PoisonError(ref err) => write!(f, "PoisonError: {err}"),
             // Add other error type formatting here.
         }
     }
@@ -171,7 +171,7 @@ pub fn check_bootstrap_versions_consistency(
         ctx.fs_version = first_version;
         if versions.iter().any(|(_, v)| *v != first_version) {
             for (path, version) in &versions {
-                println!("Bootstrap path {:?} has version {:?}", path, version);
+                println!("Bootstrap path {path:?} has version {version:?}");
             }
             return Err(anyhow!(
                 "Bootstrap versions are inconsistent, cannot use chunkdict."
@@ -1466,7 +1466,7 @@ mod tests {
         blob_table.create()?;
         for i in 0..200 {
             let blob = ChunkdictBlobInfo {
-                blob_id: format!("BLOB{}", i),
+                blob_id: format!("BLOB{i}"),
                 blob_compressed_size: i,
                 blob_uncompressed_size: i * 2,
                 blob_compressor: "zstd".to_string(),
@@ -1495,10 +1495,10 @@ mod tests {
         for i in 0..200 {
             let i64 = i as u64;
             let chunk = ChunkdictChunkInfo {
-                image_reference: format!("REDIS{}", i),
-                version: format!("1.0.0{}", i),
-                chunk_blob_id: format!("BLOB{}", i),
-                chunk_digest: format!("DIGEST{}", i),
+                image_reference: format!("REDIS{i}"),
+                version: format!("1.0.0{i}"),
+                chunk_blob_id: format!("BLOB{i}"),
+                chunk_digest: format!("DIGEST{i}"),
                 chunk_crc32: i,
                 chunk_compressed_size: i,
                 chunk_uncompressed_size: i * 2,
@@ -1529,7 +1529,7 @@ mod tests {
             let chunk = ChunkdictChunkInfo {
                 image_reference: format!("REDIS{}", 0),
                 version: format!("1.0.0{}", (i + 1) / 100),
-                chunk_blob_id: format!("BLOB{}", i),
+                chunk_blob_id: format!("BLOB{i}"),
                 chunk_digest: format!("DIGEST{}", (i + 1) % 2),
                 chunk_crc32: i,
                 chunk_compressed_size: i,
@@ -1562,7 +1562,7 @@ mod tests {
             let chunk = ChunkdictChunkInfo {
                 image_reference: format!("REDIS{}", i / 50),
                 version: format!("1.0.0{}", (i + 1) / 100),
-                chunk_blob_id: format!("BLOB{}", i),
+                chunk_blob_id: format!("BLOB{i}"),
                 chunk_digest: format!("DIGEST{}", (i + 1) % 2),
                 chunk_crc32: i,
                 chunk_compressed_size: i,
@@ -1592,7 +1592,7 @@ mod tests {
             let chunk = ChunkdictChunkInfo {
                 image_reference: format!("REDIS{}", 0),
                 version: format!("1.0.0{}", (i + 1) / 100),
-                chunk_blob_id: format!("BLOB{}", i),
+                chunk_blob_id: format!("BLOB{i}"),
                 chunk_digest: format!("DIGEST{}", (i + 1) % 4),
                 chunk_crc32: i,
                 chunk_compressed_size: 1,
@@ -1608,7 +1608,7 @@ mod tests {
             let chunk = ChunkdictChunkInfo {
                 image_reference: format!("REDIS{}", 1),
                 version: format!("1.0.0{}", (i + 1) / 100),
-                chunk_blob_id: format!("BLOB{}", i),
+                chunk_blob_id: format!("BLOB{i}"),
                 chunk_digest: format!("DIGEST{}", (i + 1) % 4),
                 chunk_crc32: i,
                 chunk_compressed_size: 1,
@@ -1635,9 +1635,9 @@ mod tests {
         for i in 0..200 {
             for j in 0..100 {
                 let chunk = ChunkdictChunkInfo {
-                    image_reference: format!("REDIS{}", i),
+                    image_reference: format!("REDIS{i}"),
                     version: format!("1.0.0{}", j / 10),
-                    chunk_blob_id: format!("BLOB{}", j),
+                    chunk_blob_id: format!("BLOB{j}"),
                     chunk_digest: format!("DIGEST{}", j + (i / 100) * 100),
                     chunk_crc32: j,
                     chunk_compressed_size: 1,
@@ -1666,9 +1666,9 @@ mod tests {
         for i in 0..200 {
             for j in 0..100 {
                 let chunk = ChunkdictChunkInfo {
-                    image_reference: format!("REDIS{}", i),
+                    image_reference: format!("REDIS{i}"),
                     version: format!("1.0.0{}", j / 10),
-                    chunk_blob_id: format!("BLOB{}", j),
+                    chunk_blob_id: format!("BLOB{j}"),
                     chunk_digest: format!("DIGEST{}", j + (i / 100) * 100),
                     chunk_crc32: j,
                     chunk_compressed_size: 1,
@@ -1702,9 +1702,9 @@ mod tests {
         for i in 0..200 {
             for j in 0..100 {
                 let chunk = ChunkdictChunkInfo {
-                    image_reference: format!("REDIS{}", i),
+                    image_reference: format!("REDIS{i}"),
                     version: format!("1.0.0{}", (j + 1) / 100),
-                    chunk_blob_id: format!("BLOB{}", j),
+                    chunk_blob_id: format!("BLOB{j}"),
                     chunk_digest: format!("DIGEST{}", j + (i / 100) * 100),
                     chunk_crc32: j,
                     chunk_compressed_size: 1,
@@ -1729,9 +1729,9 @@ mod tests {
         for i in 0..200 {
             for j in 0..100 {
                 let chunk = ChunkdictChunkInfo {
-                    image_reference: format!("REDIS{}", i),
+                    image_reference: format!("REDIS{i}"),
                     version: format!("1.0.0{}", j / 10),
-                    chunk_blob_id: format!("BLOB{}", j),
+                    chunk_blob_id: format!("BLOB{j}"),
                     chunk_digest: format!("DIGEST{}", j + (i / 100) * 100),
                     chunk_crc32: j,
                     chunk_compressed_size: 1,
@@ -1768,7 +1768,7 @@ mod tests {
             let chunk = ChunkdictChunkInfo {
                 image_reference: format!("REDIS{}", 0),
                 version: format!("1.0.0{}", (i + 1) / 20),
-                chunk_blob_id: format!("BLOB{}", i),
+                chunk_blob_id: format!("BLOB{i}"),
                 chunk_digest: format!("DIGEST{}", (i + 1) % 2),
                 chunk_crc32: i,
                 chunk_compressed_size: i,

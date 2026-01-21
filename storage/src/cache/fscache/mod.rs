@@ -151,7 +151,7 @@ impl BlobCacheMgr for FsCacheMgr {
             }
         }
 
-        self.blobs.read().unwrap().len() == 0
+        self.blobs.read().unwrap().is_empty()
     }
 
     fn backend(&self) -> &dyn BlobBackend {
@@ -274,7 +274,7 @@ impl FileCacheEntry {
         };
 
         let chunk_map = Arc::new(BlobStateMap::from(IndexedChunkMap::new(
-            &format!("{}{}", blob_file_path, BLOB_DATA_FILE_SUFFIX),
+            &format!("{blob_file_path}{BLOB_DATA_FILE_SUFFIX}"),
             blob_info.chunk_count(),
             false,
         )?));

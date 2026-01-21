@@ -359,7 +359,7 @@ struct TocIndex {
 impl TocIndex {
     fn load(path: &Path, offset: u64) -> Result<TocIndex> {
         let mut index_file = File::open(path)
-            .with_context(|| format!("stargz: failed to open index file {:?}", path))?;
+            .with_context(|| format!("stargz: failed to open index file {path:?}"))?;
         let pos = index_file
             .seek(SeekFrom::Start(offset))
             .context("stargz: failed to seek to start of TOC")?;
@@ -368,8 +368,7 @@ impl TocIndex {
         }
         let mut toc_index: TocIndex = serde_json::from_reader(index_file).with_context(|| {
             format!(
-                "stargz: failed to deserialize stargz TOC index file {:?}",
-                path
+                "stargz: failed to deserialize stargz TOC index file {path:?}"
             )
         })?;
 
@@ -627,8 +626,7 @@ impl StargzBuilder {
                     .decode(value)
                     .with_context(|| {
                         format!(
-                            "stargz: failed to parse xattr {:?} for entry {:?}",
-                            path, name
+                            "stargz: failed to parse xattr {path:?} for entry {name:?}"
                         )
                     })?;
                 xattrs.add(OsString::from(name), value)?;

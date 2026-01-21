@@ -187,7 +187,7 @@ impl NydusDaemon for ServiceController {
 
     fn start(&self) -> Result<()> {
         self.start_services()
-            .map_err(|e| Error::StartService(format!("{}", e)))
+            .map_err(|e| Error::StartService(format!("{e}")))
     }
 
     fn umount(&self) -> Result<()> {
@@ -235,7 +235,7 @@ impl NydusDaemon for ServiceController {
             if let Some(fscache) = self.fscache.lock().unwrap().clone() {
                 return fscache
                     .cull_cache(_blob_id)
-                    .map_err(|e| Error::StartService(format!("{}", e)));
+                    .map_err(|e| Error::StartService(format!("{e}")));
             }
         }
         Err(Error::Unsupported)

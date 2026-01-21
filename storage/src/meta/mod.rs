@@ -412,7 +412,7 @@ impl BlobCompressionContextInfo {
         }
 
         let uncompressed_size = blob_info.meta_ci_uncompressed_size() as usize;
-        let meta_path = format!("{}.{}", blob_path, BLOB_CCT_FILE_SUFFIX);
+        let meta_path = format!("{blob_path}.{BLOB_CCT_FILE_SUFFIX}");
         trace!(
             "try to open blob meta file: path {:?} uncompressed_size {} chunk_count {}",
             meta_path,
@@ -527,9 +527,9 @@ impl BlobCompressionContextInfo {
         }
 
         if load_chunk_digest && blob_info.has_feature(BlobFeatures::INLINED_CHUNK_DIGEST) {
-            let digest_path = PathBuf::from(format!("{}.{}", blob_path, BLOB_DIGEST_FILE_SUFFIX));
+            let digest_path = PathBuf::from(format!("{blob_path}.{BLOB_DIGEST_FILE_SUFFIX}"));
             if let Some(reader) = reader {
-                let toc_path = format!("{}.{}", blob_path, BLOB_TOC_FILE_SUFFIX);
+                let toc_path = format!("{blob_path}.{BLOB_TOC_FILE_SUFFIX}");
                 let location = if blob_info.blob_toc_size() != 0 {
                     let blob_size = reader
                         .blob_size()
@@ -1732,8 +1732,7 @@ impl BlobMetaChunkArray {
                 let entry = Self::get_chunk_entry(state, chunk_info_array, index - 1)?;
                 if !entry.is_zran() {
                     // All chunks should be ZRan chunks.
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
+                    return Err(std::io::Error::other(
                         "invalid ZRan compression information data",
                     ));
                 } else if entry.get_zran_index()? != first_zran_idx {
@@ -1746,8 +1745,7 @@ impl BlobMetaChunkArray {
 
             for entry in &chunk_info_array[index..] {
                 if entry.validate(state).is_err() || !entry.is_zran() {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
+                    return Err(std::io::Error::other(
                         "invalid ZRan compression information data",
                     ));
                 } else if entry.get_zran_index()? > last_zran_idx {

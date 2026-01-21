@@ -35,11 +35,11 @@ pub enum InodeWrapper {
 impl Debug for InodeWrapper {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::V5(i) => write!(f, "{:?}", i),
-            Self::V6(i) => write!(f, "{:?}", i),
+            Self::V5(i) => write!(f, "{i:?}"),
+            Self::V6(i) => write!(f, "{i:?}"),
             Self::Ref(i) => {
                 let i = RafsV5Inode::from(i.deref());
-                write!(f, "{:?}", i)
+                write!(f, "{i:?}")
             }
         }
     }

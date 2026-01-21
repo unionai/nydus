@@ -1036,7 +1036,7 @@ mod tests {
             source: ChunkSource::Build,
             inner: Arc::new(chunk_wrapper1),
         };
-        println!("NodeChunk: {}", chunk);
+        println!("NodeChunk: {chunk}");
         matches!(chunk.inner.deref().clone(), ChunkWrapper::V5(_));
 
         let chunk_wrapper2 = ChunkWrapper::new(RafsVersion::V6);

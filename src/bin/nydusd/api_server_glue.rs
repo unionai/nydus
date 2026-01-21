@@ -131,7 +131,7 @@ impl ApiServer {
     }
 
     fn events() -> ApiResponse {
-        let events = metrics::export_events().map_err(|e| ApiError::Events(format!("{:?}", e)))?;
+        let events = metrics::export_events().map_err(|e| ApiError::Events(format!("{e:?}")))?;
         Ok(ApiResponsePayload::Events(events))
     }
 
@@ -276,8 +276,7 @@ impl ApiServer {
             Some(mgr) => {
                 if let Err(e) = mgr.add_blob_entry(entry) {
                     Err(ApiError::DaemonAbnormal(DaemonErrorKind::Other(format!(
-                        "{}",
-                        e
+                        "{e}"
                     ))))
                 } else {
                     if let Some(mut mgr_guard) = self.get_daemon_object()?.upgrade_mgr() {
@@ -296,8 +295,7 @@ impl ApiServer {
             Some(mgr) => {
                 if let Err(e) = mgr.remove_blob_entry(param) {
                     Err(ApiError::DaemonAbnormal(DaemonErrorKind::Other(format!(
-                        "{}",
-                        e
+                        "{e}"
                     ))))
                 } else {
                     if let Some(mut mgr_guard) = self.get_daemon_object()?.upgrade_mgr() {

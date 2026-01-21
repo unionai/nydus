@@ -56,9 +56,9 @@ fn main() {
     let git_commit_version = get_git_commit_version();
 
     println!("cargo:rerun-if-changed=../git/HEAD");
-    println!("cargo:rustc-env=RUSTC_VERSION={}", rustc_ver);
-    println!("cargo:rustc-env=PROFILE={}", profile);
-    println!("cargo:rustc-env=BUILT_TIME_UTC={}", build_time);
-    println!("cargo:rustc-env=GIT_COMMIT_HASH={}", git_commit_hash);
-    println!("cargo:rustc-env=GIT_COMMIT_VERSION={}", git_commit_version);
+    println!("cargo:rustc-env=RUSTC_VERSION={rustc_ver}");
+    println!("cargo:rustc-env=PROFILE={profile}");
+    println!("cargo:rustc-env=BUILT_TIME_UTC={build_time}");
+    println!("cargo:rustc-env=GIT_COMMIT_HASH={git_commit_hash}");
+    println!("cargo:rustc-env=GIT_COMMIT_VERSION={git_commit_version}");
 }

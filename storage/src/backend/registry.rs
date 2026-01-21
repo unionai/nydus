@@ -46,11 +46,11 @@ pub enum RegistryError {
 impl fmt::Display for RegistryError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RegistryError::Common(s) => write!(f, "failed to access blob from registry, {}", s),
-            RegistryError::Url(u, e) => write!(f, "failed to parse URL {}, {}", u, e),
-            RegistryError::Request(e) => write!(f, "failed to issue request, {}", e),
-            RegistryError::Scheme(s) => write!(f, "invalid scheme, {}", s),
-            RegistryError::Transport(e) => write!(f, "network transport error, {}", e),
+            RegistryError::Common(s) => write!(f, "failed to access blob from registry, {s}"),
+            RegistryError::Url(u, e) => write!(f, "failed to parse URL {u}, {e}"),
+            RegistryError::Request(e) => write!(f, "failed to issue request, {e}"),
+            RegistryError::Scheme(s) => write!(f, "invalid scheme, {s}"),
+            RegistryError::Transport(e) => write!(f, "network transport error, {e}"),
         }
     }
 }
@@ -315,7 +315,7 @@ impl RegistryState {
         if let Some(auth) = &self.auth {
             headers.insert(
                 HEADER_AUTHORIZATION,
-                format!("Basic {}", auth).parse().unwrap(),
+                format!("Basic {auth}").parse().unwrap(),
             );
         }
 
@@ -368,7 +368,7 @@ impl RegistryState {
             Auth::Basic(_) => self
                 .auth
                 .as_ref()
-                .map(|auth| format!("Basic {}", auth))
+                .map(|auth| format!("Basic {auth}"))
                 .ok_or_else(|| einval!("invalid auth config")),
             Auth::Bearer(auth) => {
                 let token = self.get_token(auth, connection)?;
@@ -638,7 +638,7 @@ impl RegistryReader {
             .map_err(|e| RegistryError::Url(url, e))?;
         let mut headers = HeaderMap::new();
         let end_at = offset + buf.len() as u64 - 1;
-        let range = format!("bytes={}-{}", offset, end_at);
+        let range = format!("bytes={offset}-{end_at}");
         headers.insert("Range", range.parse().unwrap());
 
         let mut resp;
@@ -804,10 +804,10 @@ impl BlobReader for RegistryReader {
 
             Ok(content_length
                 .to_str()
-                .map_err(|err| RegistryError::Common(format!("invalid content length: {:?}", err)))?
+                .map_err(|err| RegistryError::Common(format!("invalid content length: {err:?}")))?
                 .parse::<u64>()
                 .map_err(|err| {
-                    RegistryError::Common(format!("invalid content length: {:?}", err))
+                    RegistryError::Common(format!("invalid content length: {err:?}"))
                 })?)
         })
     }
@@ -850,7 +850,7 @@ impl Registry {
         let cached_auth = if let Some(registry_token) = registry_token {
             // Store the registry bearer token to cached_auth, prefer to
             // use the token stored in cached_auth to request registry.
-            Cache::new(format!("Bearer {}", registry_token))
+            Cache::new(format!("Bearer {registry_token}"))
         } else {
             Cache::new(String::new())
         };

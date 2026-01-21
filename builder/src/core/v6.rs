@@ -343,7 +343,7 @@ impl Node {
         let mut dirent_off = self.v6_dirents_offset;
         let blk_addr = ctx
             .v6_block_addr(dirent_off)
-            .with_context(|| format!("failed to compute blk_addr for offset 0x{:x}", dirent_off))?;
+            .with_context(|| format!("failed to compute blk_addr for offset 0x{dirent_off:x}"))?;
         inode.set_u(blk_addr);
         self.v6_dump_inode(ctx, f_bootstrap, inode)
             .context("failed to dump inode for directory")?;
@@ -464,8 +464,7 @@ impl Node {
             let offset = chunk.inner.uncompressed_offset();
             let blk_addr = ctx.v6_block_addr(offset).with_context(|| {
                 format!(
-                    "failed to compute blk_addr for chunk with uncompressed offset 0x{:x}",
-                    offset
+                    "failed to compute blk_addr for chunk with uncompressed offset 0x{offset:x}"
                 )
             })?;
             let blob_idx = chunk.inner.blob_index();
@@ -509,7 +508,7 @@ impl Node {
         let offset = align_offset(self.v6_offset + self.v6_size_with_xattr(), unit);
         f_bootstrap
             .seek(SeekFrom::Start(offset))
-            .with_context(|| format!("failed to seek to 0x{:x} for writing chunk data", offset))?;
+            .with_context(|| format!("failed to seek to 0x{offset:x} for writing chunk data"))?;
         f_bootstrap
             .write(chunks.as_slice())
             .context("failed to write chunk data for file")?;

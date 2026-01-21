@@ -6,7 +6,7 @@ use std::{
     collections::BTreeMap,
     ffi::OsString,
     fs::Permissions,
-    io::{Error, ErrorKind, Write},
+    io::{Error, Write},
     ops::DerefMut,
     os::unix::prelude::PermissionsExt,
     path::{Path, PathBuf},
@@ -138,10 +138,7 @@ impl RafsInspector {
             };
 
             println!(
-                r#"{}    {inode_number:<8} {name:?}"#,
-                sign,
-                name = f,
-                inode_number = ino,
+                r#"{sign}    {ino:<8} {f:?}"#,
             );
 
             Ok(RafsInodeWalkAction::Continue)
@@ -188,7 +185,7 @@ impl RafsInspector {
             self.parent_inodes.push(self.cur_dir_ino);
             self.cur_dir_ino = n;
         } else {
-            println!("{} is {}", dir_name, err);
+            println!("{dir_name} is {err}");
         }
 
         Ok(None)
@@ -213,7 +210,7 @@ impl RafsInspector {
                 if let Err(e) =
                     self.stat_single_file(Some(dir_inode.as_ref()), child_inode.as_ref())
                 {
-                    return Err(Error::new(ErrorKind::Other, e));
+                    return Err(Error::other(e));
                 }
 
                 let child_inode = dir_inode.get_child_by_name(&child_name)?;
@@ -715,7 +712,7 @@ impl Executor {
                 inspector.cmd_check_inode(ino)
             }
             (cmd, _) => {
-                println!("Unsupported command: {}", cmd);
+                println!("Unsupported command: {cmd}");
                 {
                     Self::usage();
                     return Err(ExecuteError::IllegalCommand);
@@ -760,7 +757,7 @@ impl Prompt {
                 Err(ExecuteError::IllegalCommand) => continue,
                 Err(ExecuteError::HelpCommand) => continue,
                 Err(ExecuteError::ExecError(e)) => {
-                    println!("Failed to execute command, {:?}", e);
+                    println!("Failed to execute command, {e:?}");
                     continue;
                 }
                 Ok(Some(o)) => {

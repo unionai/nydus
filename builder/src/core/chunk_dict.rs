@@ -161,7 +161,7 @@ impl HashChunkDict {
         rafs_config: &RafsSuperConfig,
     ) -> Result<Self> {
         let (rs, _) = RafsSuper::load_from_file(path, config, true)
-            .with_context(|| format!("failed to open bootstrap file {:?}", path))?;
+            .with_context(|| format!("failed to open bootstrap file {path:?}"))?;
         let mut d = HashChunkDict {
             m: HashMap::new(),
             blobs: rs.superblock.get_blob_infos(),
@@ -192,8 +192,7 @@ impl HashChunkDict {
         if size % unit_size != 0 {
             return Err(std::io::Error::from_raw_os_error(libc::EINVAL)).with_context(|| {
                 format!(
-                    "load_chunk_table: invalid rafs v6 chunk table size {}",
-                    size
+                    "load_chunk_table: invalid rafs v6 chunk table size {size}"
                 )
             });
         }

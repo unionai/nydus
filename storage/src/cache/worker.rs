@@ -200,7 +200,7 @@ impl AsyncWorkerMgr {
         for num in 0..mgr.prefetch_config.threads_count {
             let mgr2 = mgr.clone();
             let res = thread::Builder::new()
-                .name(format!("nydus_storage_worker_{}", num))
+                .name(format!("nydus_storage_worker_{num}"))
                 .spawn(move || {
                     mgr2.grow_n(1);
                     mgr2.metrics

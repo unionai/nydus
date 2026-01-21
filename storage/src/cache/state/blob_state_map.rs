@@ -521,10 +521,10 @@ pub(crate) mod tests {
                 .unwrap();
             if idx % skip_index == 0 {
                 if has_ready {
-                    panic!("indexed chunk map: index {} shouldn't be ready", idx);
+                    panic!("indexed chunk map: index {idx} shouldn't be ready");
                 }
             } else if !has_ready {
-                panic!("indexed chunk map: index {} should be ready", idx);
+                panic!("indexed chunk map: index {idx} should be ready");
             }
         }
     }
@@ -565,10 +565,7 @@ pub(crate) mod tests {
         iterate(&chunks, &digested_chunk_map as &dyn ChunkMap, chunk_count);
         let elapsed2 = now.elapsed().as_millis();
 
-        println!(
-            "IndexedChunkMap vs DigestedChunkMap: {}ms vs {}ms",
-            elapsed1, elapsed2
-        );
+        println!("IndexedChunkMap vs DigestedChunkMap: {elapsed1}ms vs {elapsed2}ms",);
     }
 
     #[test]

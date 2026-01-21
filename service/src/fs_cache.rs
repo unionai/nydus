@@ -302,10 +302,10 @@ impl FsCacheHandler {
 
         if restore_file.is_none() {
             // Initialize the fscache session
-            file.write_all(format!("dir {}", dir).as_bytes())?;
+            file.write_all(format!("dir {dir}").as_bytes())?;
             file.flush()?;
             if let Some(tag) = tag {
-                file.write_all(format!("tag {}", tag).as_bytes())?;
+                file.write_all(format!("tag {tag}").as_bytes())?;
                 file.flush()?;
             }
             file.write_all(b"bind ondemand")?;
@@ -828,7 +828,7 @@ impl FsCacheHandler {
 
     #[inline]
     fn round_up_u32(&self, size: usize) -> usize {
-        (size + 3) / 4 * 4
+        size.div_ceil(4) * 4
     }
 
     //address from kernel fscache_hash()
@@ -874,13 +874,13 @@ impl FsCacheHandler {
         let dir_hash = self.fscache_hash(volume_hash, cookie_hash_key.as_slice());
 
         let dir = format!("@{:02x}", dir_hash as u8);
-        let cookie = format!("D{}", cookie_key);
+        let cookie = format!("D{cookie_key}");
         (volume_path.join(dir), cookie)
     }
 
     fn inuse(&self, cookie_dir: &Path, cookie_name: &str) -> Result<bool> {
         env::set_current_dir(cookie_dir)?;
-        let msg = format!("inuse {}", cookie_name);
+        let msg = format!("inuse {cookie_name}");
         let ret = unsafe {
             libc::write(
                 self.file.as_raw_fd(),
@@ -903,7 +903,7 @@ impl FsCacheHandler {
 
     fn cull(&self, cookie_dir: &Path, cookie_name: &str) -> Result<()> {
         env::set_current_dir(cookie_dir)?;
-        let msg = format!("cull {}", cookie_name);
+        let msg = format!("cull {cookie_name}");
         let ret = unsafe {
             libc::write(
                 self.file.as_raw_fd(),

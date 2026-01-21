@@ -31,7 +31,7 @@ pub fn generate_blob_key(domain_id: &str, blob_id: &str) -> String {
     if domain_id.is_empty() {
         blob_id.to_string()
     } else {
-        format!("{}{}{}", domain_id, ID_SPLITTER, blob_id)
+        format!("{domain_id}{ID_SPLITTER}{blob_id}")
     }
 }
 

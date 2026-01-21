@@ -957,7 +957,7 @@ fn main() -> Result<()> {
                 &build_info,
             ),
             _ => {
-                println!("{}", usage);
+                println!("{usage}");
                 Ok(())
             }
         }
@@ -987,7 +987,7 @@ fn main() -> Result<()> {
         if let Some(matches) = cmd.subcommand_matches("export") {
             Command::export(&cmd, matches, &build_info)
         } else {
-            println!("{}", usage);
+            println!("{usage}");
             Ok(())
         }
         #[cfg(not(target_os = "linux"))]
@@ -1687,7 +1687,7 @@ impl Command {
                     alt_dirs: Default::default(),
                 };
                 let local_fs = LocalFs::new(&local_fs_conf, Some("unpacker"))
-                    .with_context(|| format!("fail to create local backend for {:?}", blob_path))?;
+                    .with_context(|| format!("fail to create local backend for {blob_path:?}"))?;
 
                 (Arc::new(ConfigV2::default()), Arc::new(local_fs))
             } else {
@@ -1720,7 +1720,7 @@ impl Command {
         let mut validator = Validator::new(bootstrap_path, config)?;
         let (blobs, compressor, fs_version) = validator
             .check(verbose)
-            .with_context(|| format!("failed to check bootstrap {:?}", bootstrap_path))?;
+            .with_context(|| format!("failed to check bootstrap {bootstrap_path:?}"))?;
 
         println!("RAFS filesystem metadata is valid, referenced data blobs: ");
         let mut blob_ids = Vec::new();
@@ -2049,7 +2049,7 @@ impl Command {
             let content =
                 if let Some(backend_file) = matches.get_one::<String>("backend-config-file") {
                     fs::read_to_string(backend_file).with_context(|| {
-                        format!("fail to read backend config file {:?}", backend_file)
+                        format!("fail to read backend config file {backend_file:?}")
                     })?
                 } else if let Some(backend_config) = matches.get_one::<String>("backend-config") {
                     backend_config.clone()
@@ -2096,7 +2096,7 @@ impl Command {
             Some(v) => {
                 let param = v.trim_start_matches("0x").trim_start_matches("0X");
                 let size = u64::from_str_radix(param, 16)
-                    .context(format!("invalid blob data size {}", v))?;
+                    .context(format!("invalid blob data size {v}"))?;
                 Ok(size)
             }
         }
@@ -2113,10 +2113,10 @@ impl Command {
             }
             Some(v) => {
                 let chunk_size = if v.starts_with("0x") || v.starts_with("0X") {
-                    u32::from_str_radix(&v[2..], 16).context(format!("invalid chunk size {}", v))?
+                    u32::from_str_radix(&v[2..], 16).context(format!("invalid chunk size {v}"))?
                 } else {
                     v.parse::<u32>()
-                        .context(format!("invalid chunk size {}", v))?
+                        .context(format!("invalid chunk size {v}"))?
                 };
                 if chunk_size as u64 > RAFS_MAX_CHUNK_SIZE
                     || chunk_size < 0x1000
@@ -2139,10 +2139,10 @@ impl Command {
             None => Ok(0),
             Some(v) => {
                 let batch_size = if v.starts_with("0x") || v.starts_with("0X") {
-                    u32::from_str_radix(&v[2..], 16).context(format!("invalid batch size {}", v))?
+                    u32::from_str_radix(&v[2..], 16).context(format!("invalid batch size {v}"))?
                 } else {
                     v.parse::<u32>()
-                        .context(format!("invalid batch size {}", v))?
+                        .context(format!("invalid batch size {v}"))?
                 };
                 if batch_size > 0 {
                     if version.is_v5() {
@@ -2189,7 +2189,7 @@ impl Command {
             None => Ok(0),
             Some(v) => v
                 .parse::<u64>()
-                .context(format!("invalid blob offset {}", v)),
+                .context(format!("invalid blob offset {v}")),
         }
     }
 
@@ -2197,7 +2197,7 @@ impl Command {
         match matches.get_one::<String>("fs-version") {
             None => Ok(RafsVersion::V6),
             Some(v) => {
-                let version: u32 = v.parse().context(format!("invalid fs-version: {}", v))?;
+                let version: u32 = v.parse().context(format!("invalid fs-version: {v}"))?;
                 if version == 5 {
                     Ok(RafsVersion::V5)
                 } else if version == 6 {
@@ -2263,19 +2263,18 @@ impl Command {
                     "backend": {{
                         "type": "localfs",
                         "localfs": {{
-                            "dir": "{}"
+                            "dir": "{dir}"
                         }}
                     }},
                     "cache": {{
                         "type": "filecache",
                         "filecache": {{
-                            "work_dir": "{}"
+                            "work_dir": "{dir}"
                         }}
                     }},
-                    "metadata_path": "{}"
+                    "metadata_path": "{bootstrap}"
                 }}
-            }}"#,
-                dir, dir, bootstrap
+            }}"#
             );
             localfs_dir = Some(dir.to_string());
             nydus_api::BlobCacheEntry::from_str(&config)?

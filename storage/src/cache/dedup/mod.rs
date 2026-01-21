@@ -33,9 +33,9 @@ pub enum CasError {
 impl Display for CasError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            CasError::Io(e) => write!(f, "{}", e),
-            CasError::Db(e) => write!(f, "{}", e),
-            CasError::R2D2(e) => write!(f, "{}", e),
+            CasError::Io(e) => write!(f, "{e}"),
+            CasError::Db(e) => write!(f, "{e}"),
+            CasError::R2D2(e) => write!(f, "{e}"),
         }
     }
 }

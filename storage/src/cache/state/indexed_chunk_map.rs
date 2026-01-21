@@ -35,7 +35,7 @@ pub struct IndexedChunkMap {
 impl IndexedChunkMap {
     /// Create a new instance of `IndexedChunkMap`.
     pub fn new(blob_path: &str, chunk_count: u32, persist: bool) -> Result<Self> {
-        let filename = format!("{}.{}", blob_path, FILE_SUFFIX);
+        let filename = format!("{blob_path}.{FILE_SUFFIX}");
 
         PersistMap::open(&filename, chunk_count, true, persist).map(|map| IndexedChunkMap { map })
     }
@@ -153,7 +153,7 @@ mod tests {
 
         assert!(IndexedChunkMap::new(&blob_path, 0, false).is_err());
 
-        let cache_path = format!("{}.{}", blob_path, FILE_SUFFIX);
+        let cache_path = format!("{blob_path}.{FILE_SUFFIX}");
         let mut file = OpenOptions::new()
             .read(true)
             .write(true)
@@ -162,8 +162,7 @@ mod tests {
             .open(&cache_path)
             .map_err(|err| {
                 einval!(format!(
-                    "failed to open/create blob chunk_map file {:?}: {:?}",
-                    cache_path, err
+                    "failed to open/create blob chunk_map file {cache_path:?}: {err:?}"
                 ))
             })
             .unwrap();
@@ -183,7 +182,7 @@ mod tests {
 
         assert!(IndexedChunkMap::new(&blob_path, 0, true).is_err());
 
-        let cache_path = format!("{}.{}", blob_path, FILE_SUFFIX);
+        let cache_path = format!("{blob_path}.{FILE_SUFFIX}");
         let _file = OpenOptions::new()
             .read(true)
             .write(true)
@@ -219,7 +218,7 @@ mod tests {
 
         assert!(IndexedChunkMap::new(&blob_path, 0, true).is_err());
 
-        let cache_path = format!("{}.{}", blob_path, FILE_SUFFIX);
+        let cache_path = format!("{blob_path}.{FILE_SUFFIX}");
         let file = OpenOptions::new()
             .read(true)
             .write(true)
@@ -256,7 +255,7 @@ mod tests {
 
         assert!(IndexedChunkMap::new(&blob_path, 0, true).is_err());
 
-        let cache_path = format!("{}.{}", blob_path, FILE_SUFFIX);
+        let cache_path = format!("{blob_path}.{FILE_SUFFIX}");
         let mut file = OpenOptions::new()
             .read(true)
             .write(true)
@@ -302,7 +301,7 @@ mod tests {
 
         assert!(IndexedChunkMap::new(&blob_path, 0, true).is_err());
 
-        let cache_path = format!("{}.{}", blob_path, FILE_SUFFIX);
+        let cache_path = format!("{blob_path}.{FILE_SUFFIX}");
         let mut file = OpenOptions::new()
             .read(true)
             .write(true)
