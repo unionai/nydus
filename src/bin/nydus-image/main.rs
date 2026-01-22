@@ -2046,16 +2046,16 @@ impl Command {
         let config: Arc<ConfigV2>;
         let backend: Arc<dyn BlobBackend + Send + Sync>;
         if let Some(backend_type) = matches.get_one::<String>("backend-type") {
-            let content =
-                if let Some(backend_file) = matches.get_one::<String>("backend-config-file") {
-                    fs::read_to_string(backend_file).with_context(|| {
-                        format!("fail to read backend config file {backend_file:?}")
-                    })?
-                } else if let Some(backend_config) = matches.get_one::<String>("backend-config") {
-                    backend_config.clone()
-                } else {
-                    bail!("--backend-config or --backend-config-file must be specified");
-                };
+            let content = if let Some(backend_file) =
+                matches.get_one::<String>("backend-config-file")
+            {
+                fs::read_to_string(backend_file)
+                    .with_context(|| format!("fail to read backend config file {backend_file:?}"))?
+            } else if let Some(backend_config) = matches.get_one::<String>("backend-config") {
+                backend_config.clone()
+            } else {
+                bail!("--backend-config or --backend-config-file must be specified");
+            };
 
             if backend_type == "localfs" {
                 bail!("Use --blob-dir to specify localfs backend");
@@ -2187,9 +2187,7 @@ impl Command {
     fn get_blob_offset(matches: &ArgMatches) -> Result<u64> {
         match matches.get_one::<String>("blob-offset") {
             None => Ok(0),
-            Some(v) => v
-                .parse::<u64>()
-                .context(format!("invalid blob offset {v}")),
+            Some(v) => v.parse::<u64>().context(format!("invalid blob offset {v}")),
         }
     }
 

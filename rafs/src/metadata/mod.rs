@@ -930,7 +930,7 @@ impl RafsSuper {
     /// metadata in advance. There are ways to configure the file list to be prefetched.
     /// 1. Static file prefetch list configured during image building, recorded in prefetch list
     ///    in Rafs v5 file system metadata.
-    ///     Base on prefetch table which is persisted to bootstrap when building image.
+    ///    Base on prefetch table which is persisted to bootstrap when building image.
     /// 2. Dynamic file prefetch list configured by command line. The dynamic file prefetch list
     ///    has higher priority and the static file prefetch list will be ignored if there's dynamic
     ///    prefetch list. When a directory is specified for dynamic prefetch list, all sub directory

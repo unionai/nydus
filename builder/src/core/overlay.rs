@@ -208,7 +208,7 @@ impl Node {
             if t == WhiteoutType::OciRemoval {
                 // the whiteout filename prefixes the basename of the path to be deleted with ".wh.".
                 return Some(OsStr::from_bytes(
-                    name[OCISPEC_WHITEOUT_PREFIX.len()..].as_bytes(),
+                    &name.as_bytes()[OCISPEC_WHITEOUT_PREFIX.len()..],
                 ));
             } else if t == WhiteoutType::OverlayFsRemoval {
                 // the whiteout file has the same name as the file to be deleted.

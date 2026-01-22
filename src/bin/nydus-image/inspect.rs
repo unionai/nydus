@@ -137,9 +137,7 @@ impl RafsInspector {
                 " "
             };
 
-            println!(
-                r#"{sign}    {ino:<8} {f:?}"#,
-            );
+            println!(r#"{sign}    {ino:<8} {f:?}"#,);
 
             Ok(RafsInodeWalkAction::Continue)
         })?;

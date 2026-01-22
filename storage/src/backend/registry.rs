@@ -806,9 +806,7 @@ impl BlobReader for RegistryReader {
                 .to_str()
                 .map_err(|err| RegistryError::Common(format!("invalid content length: {err:?}")))?
                 .parse::<u64>()
-                .map_err(|err| {
-                    RegistryError::Common(format!("invalid content length: {err:?}"))
-                })?)
+                .map_err(|err| RegistryError::Common(format!("invalid content length: {err:?}")))?)
         })
     }
 

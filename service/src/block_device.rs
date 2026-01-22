@@ -117,15 +117,12 @@ impl BlockDevice {
             let extra_info = meta_blob_config
                 .get_blob_extra_info(&blob_id)
                 .ok_or_else(|| {
-                    let msg = format!(
-                        "block_device: can not get extra information for blob {blob_id}"
-                    );
+                    let msg =
+                        format!("block_device: can not get extra information for blob {blob_id}");
                     enoent!(msg)
                 })?;
             if extra_info.mapped_blkaddr == 0 {
-                let msg = format!(
-                    "block_device: mapped block address for blob {blob_id} is zero"
-                );
+                let msg = format!("block_device: mapped block address for blob {blob_id} is zero");
                 return Err(einval!(msg));
             }
             if is_tarfs_mode != blob_info.features().is_tarfs() {
