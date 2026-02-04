@@ -680,6 +680,9 @@ impl CacheConfigV2 {
             if self.prefetch.batch_size > 0x10000000 {
                 return false;
             }
+            if !self.prefetch.batch_size.is_power_of_two() {
+                return false;
+            }
             if self.prefetch.threads_count == 0 || self.prefetch.threads_count > 1024 {
                 return false;
             }
@@ -2319,6 +2322,19 @@ mod tests {
 
         let cfg = CacheConfigV2 {
             cache_type: "foobar".to_string(),
+            ..Default::default()
+        };
+        assert!(!cfg.validate());
+
+        let cfg = CacheConfigV2 {
+            cache_type: "dummycache".to_string(),
+            prefetch: PrefetchConfigV2 {
+                enable: true,
+                threads_count: 1,
+                batch_size: 1023, // not power of two
+                bandwidth_limit: 10000000,
+                prefetch_all: false,
+            },
             ..Default::default()
         };
         assert!(!cfg.validate());
