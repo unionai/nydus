@@ -35,9 +35,14 @@ pub struct IndexedChunkMap {
 impl IndexedChunkMap {
     /// Create a new instance of `IndexedChunkMap`.
     pub fn new(blob_path: &str, chunk_count: u32, persist: bool) -> Result<Self> {
-        let filename = format!("{blob_path}.{FILE_SUFFIX}");
+        let map = if persist {
+            let filename = format!("{blob_path}.{FILE_SUFFIX}");
+            PersistMap::create(&filename, chunk_count)?
+        } else {
+            PersistMap::transient(chunk_count)?
+        };
 
-        PersistMap::open(&filename, chunk_count, true, persist).map(|map| IndexedChunkMap { map })
+        Ok(Self { map })
     }
 }
 
@@ -46,8 +51,7 @@ impl ChunkMap for IndexedChunkMap {
         if self.is_range_all_ready() {
             Ok(true)
         } else {
-            let index = self.map.validate_index(chunk.id())?;
-            Ok(self.map.is_chunk_ready(index).0)
+            self.map.is_chunk_ready(chunk.id())
         }
     }
 
@@ -75,10 +79,9 @@ impl RangeMap for IndexedChunkMap {
     fn is_range_ready(&self, start_index: u32, count: u32) -> Result<bool> {
         if !self.is_range_all_ready() {
             for idx in 0..count {
-                let index = self
-                    .map
-                    .validate_index(start_index.checked_add(idx).ok_or_else(|| einval!())?)?;
-                if !self.map.is_chunk_ready(index).0 {
+                let index = start_index.checked_add(idx).ok_or_else(|| einval!())?;
+
+                if !self.map.is_chunk_ready(index)? {
                     return Ok(false);
                 }
             }
@@ -101,7 +104,7 @@ impl RangeMap for IndexedChunkMap {
         let end = start_index + count;
 
         for index in start_index..end {
-            if !self.map.is_chunk_ready(index).0 {
+            if !self.map.is_chunk_ready(index)? {
                 vec.push(index);
             }
         }
@@ -137,7 +140,7 @@ impl ChunkIndexGetter for IndexedChunkMap {
 mod tests {
     use std::fs::OpenOptions;
     use std::io::Write;
-    use std::sync::atomic::Ordering;
+    use std::sync::atomic::AtomicU32;
     use vmm_sys_util::tempdir::TempDir;
 
     use super::super::persist_map::*;
@@ -175,79 +178,6 @@ mod tests {
     }
 
     #[test]
-    fn test_indexed_new_zero_file_size() {
-        let dir = TempDir::new().unwrap();
-        let blob_path = dir.as_path().join("blob-1");
-        let blob_path = blob_path.as_os_str().to_str().unwrap().to_string();
-
-        assert!(IndexedChunkMap::new(&blob_path, 0, true).is_err());
-
-        let cache_path = format!("{blob_path}.{FILE_SUFFIX}");
-        let _file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(&cache_path)
-            .map_err(|err| {
-                einval!(format!(
-                    "failed to open/create blob chunk_map file {:?}: {:?}",
-                    cache_path, err
-                ))
-            })
-            .unwrap();
-
-        let chunk = MockChunkInfo::new();
-        assert_eq!(chunk.id(), 0);
-
-        let map = IndexedChunkMap::new(&blob_path, 1, true).unwrap();
-        assert_eq!(map.map.not_ready_count.load(Ordering::Acquire), 1);
-        assert_eq!(map.map.count, 1);
-        assert_eq!(map.map.size(), 0x1001);
-        assert!(!map.is_range_all_ready());
-        assert!(!map.is_ready(chunk.as_base()).unwrap());
-        map.set_ready_and_clear_pending(chunk.as_base()).unwrap();
-        assert!(map.is_ready(chunk.as_base()).unwrap());
-    }
-
-    #[test]
-    fn test_indexed_new_header_not_ready() {
-        let dir = TempDir::new().unwrap();
-        let blob_path = dir.as_path().join("blob-1");
-        let blob_path = blob_path.as_os_str().to_str().unwrap().to_string();
-
-        assert!(IndexedChunkMap::new(&blob_path, 0, true).is_err());
-
-        let cache_path = format!("{blob_path}.{FILE_SUFFIX}");
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(&cache_path)
-            .map_err(|err| {
-                einval!(format!(
-                    "failed to open/create blob chunk_map file {:?}: {:?}",
-                    cache_path, err
-                ))
-            })
-            .unwrap();
-        file.set_len(0x1001).unwrap();
-
-        let chunk = MockChunkInfo::new();
-        assert_eq!(chunk.id(), 0);
-
-        let map = IndexedChunkMap::new(&blob_path, 1, true).unwrap();
-        assert_eq!(map.map.not_ready_count.load(Ordering::Acquire), 1);
-        assert_eq!(map.map.count, 1);
-        assert_eq!(map.map.size(), 0x1001);
-        assert!(!map.is_range_all_ready());
-        assert!(!map.is_ready(chunk.as_base()).unwrap());
-        map.set_ready_and_clear_pending(chunk.as_base()).unwrap();
-        assert!(map.is_ready(chunk.as_base()).unwrap());
-    }
-
-    #[test]
     fn test_indexed_new_all_ready() {
         let dir = TempDir::new().unwrap();
         let blob_path = dir.as_path().join("blob-1");
@@ -271,9 +201,11 @@ mod tests {
             .unwrap();
         let header = Header {
             magic: MAGIC1,
-            version: 1,
+            version: 2,
             magic2: MAGIC2,
-            all_ready: MAGIC_ALL_READY,
+            _all_ready: 0,
+            count: 1,
+            not_ready_count: AtomicU32::new(0),
             reserved: [0x0u8; HEADER_RESERVED_SIZE],
         };
 
@@ -286,56 +218,9 @@ mod tests {
 
         let map = IndexedChunkMap::new(&blob_path, 1, true).unwrap();
         assert!(map.is_range_all_ready());
-        assert_eq!(map.map.count, 1);
+        assert_eq!(map.map.count(), 1);
         assert_eq!(map.map.size(), 0x1001);
         assert!(map.is_ready(chunk.as_base()).unwrap());
-        map.set_ready_and_clear_pending(chunk.as_base()).unwrap();
-        assert!(map.is_ready(chunk.as_base()).unwrap());
-    }
-
-    #[test]
-    fn test_indexed_new_load_v0() {
-        let dir = TempDir::new().unwrap();
-        let blob_path = dir.as_path().join("blob-1");
-        let blob_path = blob_path.as_os_str().to_str().unwrap().to_string();
-
-        assert!(IndexedChunkMap::new(&blob_path, 0, true).is_err());
-
-        let cache_path = format!("{blob_path}.{FILE_SUFFIX}");
-        let mut file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(&cache_path)
-            .map_err(|err| {
-                einval!(format!(
-                    "failed to open/create blob chunk_map file {:?}: {:?}",
-                    cache_path, err
-                ))
-            })
-            .unwrap();
-        let header = Header {
-            magic: MAGIC1,
-            version: 0,
-            magic2: 0,
-            all_ready: 0,
-            reserved: [0x0u8; HEADER_RESERVED_SIZE],
-        };
-
-        // write file header and sync to disk.
-        file.write_all(header.as_slice()).unwrap();
-        file.write_all(&[0x0u8]).unwrap();
-
-        let chunk = MockChunkInfo::new();
-        assert_eq!(chunk.id(), 0);
-
-        let map = IndexedChunkMap::new(&blob_path, 1, true).unwrap();
-        assert_eq!(map.map.not_ready_count.load(Ordering::Acquire), 1);
-        assert_eq!(map.map.count, 1);
-        assert_eq!(map.map.size(), 0x1001);
-        assert!(!map.is_range_all_ready());
-        assert!(!map.is_ready(chunk.as_base()).unwrap());
         map.set_ready_and_clear_pending(chunk.as_base()).unwrap();
         assert!(map.is_ready(chunk.as_base()).unwrap());
     }

@@ -4,20 +4,26 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use std::fs::{File, OpenOptions};
-use std::io::{Result, Write};
+use std::io::Result;
+use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::AsRawFd;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, AtomicU8, Ordering};
 
+use nix::NixPath;
 use nydus_utils::div_round_up;
-use nydus_utils::filemap::{clone_file, FileMapState};
+use nydus_utils::filemap::FileMapState;
 
 use crate::utils::readahead;
 
+#[cfg(target_os = "macos")]
+use vmm_sys_util::tempfile::TempFile;
+
+pub(crate) const VERSION: u32 = 2;
 pub(crate) const MAGIC1: u32 = 0x424D_4150;
 pub(crate) const MAGIC2: u32 = 0x434D_4150;
-pub(crate) const MAGIC_ALL_READY: u32 = 0x4D4D_4150;
 pub(crate) const HEADER_SIZE: usize = 4096;
-pub(crate) const HEADER_RESERVED_SIZE: usize = HEADER_SIZE - 16;
+pub(crate) const HEADER_RESERVED_SIZE: usize = HEADER_SIZE - 20 - size_of::<AtomicU32>();
 
 /// The blob chunk map file header, 4096 bytes.
 #[repr(C)]
@@ -26,11 +32,14 @@ pub(crate) struct Header {
     pub magic: u32,
     pub version: u32,
     pub magic2: u32,
-    pub all_ready: u32,
+    pub _all_ready: u32,
+    pub count: u32,
+    pub not_ready_count: AtomicU32,
     pub reserved: [u8; HEADER_RESERVED_SIZE],
 }
 
 impl Header {
+    #[cfg(test)]
     pub fn as_slice(&self) -> &[u8] {
         unsafe {
             std::slice::from_raw_parts(
@@ -42,133 +51,150 @@ impl Header {
 }
 
 pub(crate) struct PersistMap {
-    pub count: u32,
-    pub not_ready_count: AtomicU32,
+    count: u32,
     filemap: FileMapState,
 }
 
 impl PersistMap {
-    pub fn open(filename: &str, chunk_count: u32, create: bool, persist: bool) -> Result<Self> {
+    /// Creates a new file or opens existing. An existing file chunk count must
+    /// match the specified.
+    pub fn create<P: AsRef<Path>>(filename: P, chunk_count: u32) -> Result<Self> {
         if chunk_count == 0 {
             return Err(einval!("chunk count should be greater than 0"));
         }
 
-        let mut file = OpenOptions::new()
-            .read(true)
-            .write(create)
-            .create(create)
-            .truncate(!persist)
-            .open(filename)
-            .map_err(|err| {
-                einval!(format!(
-                    "failed to open/create blob chunk_map file {:?}: {:?}",
-                    filename, err
-                ))
-            })?;
-
-        let file_size = file.metadata()?.len();
-        let bitmap_size = div_round_up(chunk_count as u64, 8u64);
-        let expected_size = HEADER_SIZE as u64 + bitmap_size;
-        let mut new_content = false;
-
-        if file_size == 0 {
-            if !create {
-                return Err(enoent!());
-            }
-
-            new_content = true;
-            Self::write_header(&mut file, expected_size)?;
-        } else if file_size != expected_size {
-            // File size doesn't match, it's too risky to accept the chunk state file. Fallback to
-            // always mark chunk data as not ready.
-            warn!("blob chunk_map file may be corrupted: {:?}", filename);
-            return Err(einval!(format!("chunk_map file {:?} is invalid", filename)));
-        }
-
-        let file2 = clone_file(file.as_raw_fd())?;
-        let mut filemap = FileMapState::new(file2, 0, expected_size as usize, true)?;
-        let header = filemap.get_mut::<Header>(0)?;
-        if header.magic != MAGIC1 {
-            if !create {
-                return Err(enoent!());
-            }
-
-            // There's race window between "file.set_len()" and "file.write(&header)". If that
-            // happens, all file content should be zero. Detect the race window and write out
-            // header again to fix it.
-            let content = filemap.get_slice::<u8>(0, expected_size as usize)?;
-            for c in content {
-                if *c != 0 {
-                    return Err(einval!(format!(
-                        "invalid blob chunk_map file header: {:?}",
-                        filename
-                    )));
-                }
-            }
-
-            new_content = true;
-            Self::write_header(&mut file, expected_size)?;
-        }
-
-        let header = filemap.get_mut::<Header>(0)?;
-        let mut not_ready_count = chunk_count;
-        if header.version >= 1 {
-            if header.magic2 != MAGIC2 {
-                return Err(einval!(format!(
-                    "invalid blob chunk_map file header: {:?}",
-                    filename
-                )));
-            }
-            if header.all_ready == MAGIC_ALL_READY {
-                not_ready_count = 0;
-            } else if new_content {
-                not_ready_count = chunk_count;
-            } else {
-                let mut ready_count = 0;
-                for idx in HEADER_SIZE..expected_size as usize {
-                    let current = filemap.get_ref::<AtomicU8>(idx)?;
-                    let val = current.load(Ordering::Acquire);
-                    ready_count += val.count_ones() as u32;
-                }
-
-                if ready_count >= chunk_count {
-                    let header = filemap.get_mut::<Header>(0)?;
-                    header.all_ready = MAGIC_ALL_READY;
-                    let _ = file.sync_all();
-                    not_ready_count = 0;
+        let filename = filename.as_ref();
+        let dir = filename
+            .parent()
+            .map(|d| {
+                if d.is_empty() {
+                    PathBuf::from(".")
                 } else {
-                    not_ready_count = chunk_count - ready_count;
+                    d.into()
                 }
+            })
+            .ok_or_else(|| einval!("missing filename"))?;
+
+        // Create an annonymous file
+        let file = AnonymousFile::open(&dir)?;
+
+        let file_size = Self::calc_file_size(chunk_count);
+        file.inner().set_len(file_size)?;
+
+        let mut filemap =
+            FileMapState::new(file.inner().try_clone()?, 0, file_size as usize, true)?;
+
+        // Write the header and zeroed out bitmap
+        Self::write_header(&mut filemap, chunk_count)?;
+
+        // Flush before publishing to ensure that the file is in a valid state on disk
+        file.inner().sync_all()?;
+
+        // Publish as filename
+        match file.publish(&filename) {
+            Ok(()) => Ok(Self {
+                count: chunk_count,
+                filemap,
+            }),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                // Another process beat us to it
+                Self::existing(filename, chunk_count)
             }
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Akin to `create` but does not store it on disk.
+    pub fn transient(chunk_count: u32) -> Result<Self> {
+        if chunk_count == 0 {
+            return Err(einval!("chunk count should be greater than 0"));
         }
 
-        readahead(file.as_raw_fd(), 0, expected_size);
-        if !persist {
-            let _ = std::fs::remove_file(filename);
-        }
+        let file_size = Self::calc_file_size(chunk_count);
+
+        let mut filemap = FileMapState::anonymous(0, file_size as usize)?;
+
+        // Write the header and zeroed out bitmap
+        Self::write_header(&mut filemap, chunk_count)?;
 
         Ok(Self {
             count: chunk_count,
-            not_ready_count: AtomicU32::new(not_ready_count),
             filemap,
         })
     }
 
-    fn write_header(file: &mut File, size: u64) -> Result<()> {
+    /// Opens an existing file. Fails if the file does not exist.
+    /// An existing file chunk count must match the specified.
+    pub fn existing<P: AsRef<Path>>(filename: P, chunk_count: u32) -> Result<Self> {
+        if chunk_count == 0 {
+            return Err(einval!("chunk count should be greater than 0"));
+        }
+
+        let filename = filename.as_ref();
+
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(filename)
+            .map_err(|err| {
+                einval!(format!(
+                    "failed to open blob chunk_map file {}: {err}",
+                    filename.display()
+                ))
+            })?;
+
+        let file_size = file.metadata()?.len();
+        let expected_size = Self::calc_file_size(chunk_count);
+        if file_size != expected_size {
+            return Err(einval!(format!(
+                "chunk_map file {} has unexpected size: {file_size}, expected: {expected_size}",
+                filename.display()
+            )));
+        }
+
+        readahead(file.as_raw_fd(), 0, expected_size);
+
+        let mut filemap = FileMapState::new(file, 0, expected_size as usize, true)?;
+        let header = filemap.get_mut::<Header>(0)?;
+        if header.magic != MAGIC1 {
+            return Err(einval!(format!(
+                "chunk_map file {filename:?} has bad magic"
+            )));
+        }
+        if header.version != VERSION {
+            return Err(einval!(format!(
+                "chunk_map file {filename:?} has bad version"
+            )));
+        }
+        if header.count != chunk_count {
+            return Err(einval!(format!(
+                "chunk_map file {filename:?} has wrong count"
+            )));
+        }
+
+        Ok(Self {
+            count: chunk_count,
+            filemap,
+        })
+    }
+
+    fn calc_file_size(chunk_count: u32) -> u64 {
+        let bitmap_size = div_round_up(chunk_count as u64, 8u64);
+        HEADER_SIZE as u64 + bitmap_size
+    }
+
+    fn write_header(filemap: &mut FileMapState, chunk_count: u32) -> Result<()> {
         let header = Header {
             magic: MAGIC1,
-            version: 1,
+            version: VERSION,
             magic2: MAGIC2,
-            all_ready: 0,
+            _all_ready: 0,
+            count: chunk_count,
+            not_ready_count: AtomicU32::new(chunk_count),
             reserved: [0x0u8; HEADER_RESERVED_SIZE],
         };
 
-        // Set file size to expected value and sync to disk.
-        file.set_len(size)?;
-        file.sync_all()?;
-        // write file header and sync to disk.
-        file.write_all(header.as_slice())?;
-        file.sync_all()?;
+        *filemap.get_mut(0)? = header;
 
         Ok(())
     }
@@ -179,9 +205,9 @@ impl PersistMap {
     }
 
     #[inline]
-    pub fn validate_index(&self, idx: u32) -> Result<u32> {
+    fn validate_index(&self, idx: u32) -> Result<()> {
         if idx < self.count {
-            Ok(idx)
+            Ok(())
         } else {
             Err(einval!(format!(
                 "chunk index {} exceeds chunk count {}",
@@ -191,23 +217,23 @@ impl PersistMap {
     }
 
     #[inline]
-    fn read_u8(&self, idx: u32) -> u8 {
+    fn read_u8(&self, idx: u32) -> Result<u8> {
         let start = HEADER_SIZE + (idx as usize >> 3);
-        let current = self.filemap.get_ref::<AtomicU8>(start).unwrap();
+        let current = self.filemap.get_ref::<AtomicU8>(start)?;
 
-        current.load(Ordering::Acquire)
+        Ok(current.load(Ordering::Acquire))
     }
 
     #[inline]
-    fn write_u8(&self, idx: u32, current: u8) -> bool {
+    fn write_u8(&self, idx: u32, current: u8) -> Result<bool> {
         let mask = Self::index_to_mask(idx);
         let expected = current | mask;
         let start = HEADER_SIZE + (idx as usize >> 3);
-        let atomic_value = self.filemap.get_ref::<AtomicU8>(start).unwrap();
+        let atomic_value = self.filemap.get_ref::<AtomicU8>(start)?;
 
-        atomic_value
+        Ok(atomic_value
             .compare_exchange(current, expected, Ordering::Acquire, Ordering::Relaxed)
-            .is_ok()
+            .is_ok())
     }
 
     #[inline]
@@ -217,28 +243,33 @@ impl PersistMap {
     }
 
     #[inline]
-    pub fn is_chunk_ready(&self, index: u32) -> (bool, u8) {
-        let mask = Self::index_to_mask(index);
-        let current = self.read_u8(index);
-        let ready = current & mask == mask;
+    fn header(&self) -> &Header {
+        self.filemap.get_ref(0).unwrap()
+    }
 
-        (ready, current)
+    #[inline]
+    pub fn is_chunk_ready(&self, index: u32) -> Result<bool> {
+        self.validate_index(index)?;
+
+        let mask = Self::index_to_mask(index);
+        let current = self.read_u8(index)?;
+        Ok(current & mask == mask)
     }
 
     pub fn set_chunk_ready(&self, index: u32) -> Result<()> {
-        let index = self.validate_index(index)?;
+        self.validate_index(index)?;
+        let mask = Self::index_to_mask(index);
 
         // Loop to atomically update the state bit corresponding to the chunk index.
         loop {
-            let (ready, current) = self.is_chunk_ready(index);
+            let current = self.read_u8(index)?;
+            let ready = current & mask == mask;
             if ready {
                 break;
             }
 
-            if self.write_u8(index, current) {
-                if self.not_ready_count.fetch_sub(1, Ordering::AcqRel) == 1 {
-                    self.mark_all_ready();
-                }
+            if self.write_u8(index, current)? {
+                self.header().not_ready_count.fetch_sub(1, Ordering::AcqRel);
                 break;
             }
         }
@@ -246,19 +277,135 @@ impl PersistMap {
         Ok(())
     }
 
-    fn mark_all_ready(&self) {
-        if self.filemap.sync_data().is_ok() {
-            /*
-            if let Ok(header) = self.filemap.get_mut::<Header>(0) {
-                header.all_ready = MAGIC_ALL_READY;
-                let _ = self.filemap.sync_data();
-            }
-             */
-        }
+    #[inline]
+    pub fn is_range_all_ready(&self) -> bool {
+        self.header().not_ready_count.load(Ordering::Acquire) == 0
     }
 
     #[inline]
-    pub fn is_range_all_ready(&self) -> bool {
-        self.not_ready_count.load(Ordering::Acquire) == 0
+    #[cfg(test)]
+    pub fn count(&self) -> u32 {
+        self.count
+    }
+}
+
+#[cfg(target_os = "macos")]
+struct AnonymousFile(TempFile);
+
+#[cfg(target_os = "macos")]
+impl AnonymousFile {
+    fn open(dir: &Path) -> Result<Self> {
+        Ok(Self(TempFile::new_in(dir)?))
+    }
+
+    fn inner(&self) -> &File {
+        &self.0.as_file()
+    }
+
+    fn publish(&self, filename: &Path) -> Result<()> {
+        fs::hard_link(self.0.as_path(), filename)
+    }
+}
+
+#[cfg(target_os = "linux")]
+struct AnonymousFile(File);
+
+#[cfg(target_os = "linux")]
+impl AnonymousFile {
+    fn open(dir: &Path) -> Result<Self> {
+        // Create an annonymous file
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .custom_flags(libc::O_TMPFILE)
+            .open(dir)
+            .map_err(|err| einval!(format!("failed to open/create blob chunk_map file: {err}",)))?;
+
+        Ok(Self(file))
+    }
+
+    fn inner(&self) -> &File {
+        &self.0
+    }
+
+    fn publish(&self, filename: &Path) -> Result<()> {
+        let ret = unsafe {
+            let oldpath = std::ffi::CString::default();
+            let newpath = std::ffi::CString::new(filename.as_os_str().as_encoded_bytes())?;
+
+            libc::linkat(
+                self.0.as_raw_fd(),
+                oldpath.as_ptr(),
+                libc::AT_FDCWD,
+                newpath.as_ptr(),
+                libc::AT_EMPTY_PATH,
+            )
+        };
+
+        if ret < 0 {
+            Err(last_error!())
+        } else {
+            Ok(())
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use vmm_sys_util::tempdir::TempDir;
+
+    const NUM_CHUNKS: u32 = 1000;
+
+    #[test]
+    fn test_persist_map_create() {
+        let dir = TempDir::new().unwrap();
+        let filename = dir.as_path().join("persist-map");
+
+        let mut maps: Vec<PersistMap> = Vec::new();
+
+        for i in 0..10 {
+            let map = PersistMap::create(&filename, NUM_CHUNKS).unwrap();
+            assert!(map.count() == NUM_CHUNKS);
+
+            // set some ready with overlap from the previous iteration
+            let start_idx = std::cmp::max((i as i32) * 100 - 20, 0) as u32;
+            let end_idx = (i + 1) * 100;
+            for idx in start_idx..end_idx {
+                map.set_chunk_ready(idx as u32).unwrap();
+                assert!(map.is_chunk_ready(idx).unwrap());
+
+                let is_last = idx == NUM_CHUNKS - 1;
+                assert!(map.is_range_all_ready() == is_last);
+            }
+
+            maps.push(map);
+        }
+
+        // close all
+        drop(maps);
+
+        // make sure the file is still there
+        let map = PersistMap::create(&filename, NUM_CHUNKS).unwrap();
+        assert!(map.is_range_all_ready());
+        drop(map);
+
+        let map = PersistMap::existing(&filename, NUM_CHUNKS).unwrap();
+        assert!(map.is_range_all_ready());
+    }
+
+    #[test]
+    fn test_persist_map_transient() {
+        let map = PersistMap::transient(NUM_CHUNKS).unwrap();
+        assert!(map.count() == NUM_CHUNKS);
+
+        // set some ready with overlap from the previous iteration
+        for idx in 0..NUM_CHUNKS {
+            map.set_chunk_ready(idx as u32).unwrap();
+            assert!(map.is_chunk_ready(idx).unwrap());
+
+            let is_last = idx == NUM_CHUNKS - 1;
+            assert!(map.is_range_all_ready() == is_last);
+        }
     }
 }

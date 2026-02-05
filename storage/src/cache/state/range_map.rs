@@ -28,7 +28,7 @@ impl BlobRangeMap {
         let filename = format!("{blob_path}.{FILE_SUFFIX}");
         debug_assert!(shift < 64);
 
-        PersistMap::open(&filename, count, true, true).map(|map| BlobRangeMap { shift, map })
+        PersistMap::create(&filename, count).map(|map| BlobRangeMap { shift, map })
     }
 
     /// Create a new instance of `BlobRangeMap` from an existing chunk map file.
@@ -36,7 +36,7 @@ impl BlobRangeMap {
         let filename = format!("{workdir}/{blob_id}.{FILE_SUFFIX}");
         debug_assert!(shift < 64);
 
-        PersistMap::open(&filename, count, false, true).map(|map| BlobRangeMap { shift, map })
+        PersistMap::existing(&filename, count).map(|map| BlobRangeMap { shift, map })
     }
 
     pub(crate) fn get_range(&self, start: u64, count: u64) -> Result<(u32, u32)> {
@@ -46,8 +46,6 @@ impl BlobRangeMap {
             if start_index > u32::MAX as u64 || end_index > u32::MAX as u64 {
                 Err(einval!())
             } else {
-                self.map.validate_index(start_index as u32)?;
-                self.map.validate_index(end_index as u32)?;
                 Ok((start_index as u32, end_index as u32 + 1))
             }
         } else {
@@ -68,7 +66,7 @@ impl RangeMap for BlobRangeMap {
         if !self.is_range_all_ready() {
             let (start_index, end_index) = self.get_range(start, count)?;
             for index in start_index..end_index {
-                if !self.map.is_chunk_ready(index).0 {
+                if !self.map.is_chunk_ready(index)? {
                     return Ok(false);
                 }
             }
@@ -89,7 +87,7 @@ impl RangeMap for BlobRangeMap {
             let mut vec = Vec::with_capacity(count as usize);
 
             for index in start_index..end_index {
-                if !self.map.is_chunk_ready(index).0 {
+                if !self.map.is_chunk_ready(index)? {
                     vec.push((index as u64) << self.shift);
                 }
             }
