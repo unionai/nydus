@@ -5,7 +5,7 @@
 use std::fs::File;
 use std::io::Result;
 use std::mem::size_of;
-use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd, RawFd};
+use std::os::unix::io::{FromRawFd, IntoRawFd, RawFd};
 
 /// Struct to manage memory range mapped from file objects.
 ///
@@ -53,6 +53,20 @@ impl FileMapState {
     ///
     /// It takes ownership of the file object and will close it when the returned object is dropped.
     pub fn new(file: File, offset: libc::off_t, size: usize, writable: bool) -> Result<Self> {
+        Self::from_fd(file.into_raw_fd(), offset, size, writable, 0)
+    }
+
+    pub fn anonymous(offset: libc::off_t, size: usize) -> Result<Self> {
+        Self::from_fd(-1, offset, size, true, libc::MAP_ANONYMOUS)
+    }
+
+    fn from_fd(
+        fd: RawFd,
+        offset: libc::off_t,
+        size: usize,
+        writable: bool,
+        flags: libc::c_int,
+    ) -> Result<Self> {
         let prot = if writable {
             libc::PROT_READ | libc::PROT_WRITE
         } else {
@@ -63,8 +77,8 @@ impl FileMapState {
                 std::ptr::null_mut(),
                 size,
                 prot,
-                libc::MAP_NORESERVE | libc::MAP_SHARED,
-                file.as_raw_fd(),
+                libc::MAP_NORESERVE | libc::MAP_SHARED | flags,
+                fd,
                 offset,
             )
         } as *const u8;
@@ -81,7 +95,7 @@ impl FileMapState {
         let end = unsafe { base.add(size) };
 
         Ok(Self {
-            fd: file.into_raw_fd(),
+            fd,
             base,
             end,
             size,
