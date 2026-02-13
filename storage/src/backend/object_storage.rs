@@ -13,6 +13,7 @@ use std::sync::Arc;
 
 use reqwest::header::{HeaderMap, CONTENT_LENGTH};
 use reqwest::Method;
+use tracing::instrument;
 
 use nydus_utils::metrics::BackendMetrics;
 
@@ -107,6 +108,7 @@ where
             })?)
     }
 
+    #[instrument(skip(self, buf), fields(blob_id = self.blob_id, len=buf.len()))]
     fn try_read(&self, mut buf: &mut [u8], offset: u64) -> BackendResult<usize> {
         let query = &[];
         let (resource, url) = self.state.url(&self.blob_id, query);
@@ -190,6 +192,7 @@ where
         self.metrics.as_ref().unwrap()
     }
 
+    #[instrument(skip(self))]
     fn get_reader(&self, blob_id: &str) -> BackendResult<Arc<dyn BlobReader>> {
         if let Some(metrics) = self.metrics.as_ref() {
             Ok(Arc::new(ObjectStorageReader {

@@ -29,6 +29,7 @@ use fuse_backend_rs::abi::fuse_abi::{stat64, statvfs64};
 use fuse_backend_rs::api::filesystem::*;
 use fuse_backend_rs::api::BackendFileSystem;
 use nix::unistd::{getegid, geteuid};
+use tracing::{info_span, instrument};
 
 use nydus_api::ConfigV2;
 use nydus_storage::device::{BlobDevice, BlobIoVec, BlobPrefetchRequest};
@@ -613,6 +614,7 @@ impl FileSystem for Rafs {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[instrument(skip_all, fields(ino=ino, size=size, offset=offset))]
     fn read(
         &self,
         _ctx: &Context,
@@ -677,6 +679,8 @@ impl FileSystem for Rafs {
         for io_vec in io_vecs.iter_mut() {
             assert!(!io_vec.is_empty());
             assert_ne!(io_vec.size(), 0);
+
+            let _span = info_span!("read_one", size = io_vec.size()).entered();
 
             // Avoid copying `desc`
             let r = self.device.read_to(w, io_vec)?;

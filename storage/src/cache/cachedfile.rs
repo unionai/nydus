@@ -80,6 +80,9 @@ impl FileCacheMeta {
 
             if let Some(r) = runtime {
                 r.as_ref().spawn_blocking(move || {
+                    let current = nydus_utils::trace::current_span();
+                    let _span = tracing::info_span!(parent: current, "read_meta").entered();
+
                     let mut retry = 0;
                     let mut delayer = Delayer::new(
                         DelayType::BackOff,
