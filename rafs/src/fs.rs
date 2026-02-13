@@ -29,6 +29,7 @@ use fuse_backend_rs::abi::fuse_abi::{stat64, statvfs64};
 use fuse_backend_rs::api::filesystem::*;
 use fuse_backend_rs::api::BackendFileSystem;
 use nix::unistd::{getegid, geteuid};
+use tracing::info_span;
 
 use nydus_api::ConfigV2;
 use nydus_storage::device::{BlobDevice, BlobIoVec, BlobPrefetchRequest};
@@ -624,6 +625,9 @@ impl FileSystem for Rafs {
         _lock_owner: Option<u64>,
         _flags: u32,
     ) -> Result<usize> {
+        let current = nydus_utils::trace::current_span_id();
+        let _span = info_span!(parent: current, "read", ino, size, offset).entered();
+
         if offset.checked_add(size as u64).is_none() {
             return Err(einval!("offset + size wraps around."));
         }
@@ -677,6 +681,8 @@ impl FileSystem for Rafs {
         for io_vec in io_vecs.iter_mut() {
             assert!(!io_vec.is_empty());
             assert_ne!(io_vec.size(), 0);
+
+            let _span = info_span!("read_one", size = io_vec.size()).entered();
 
             // Avoid copying `desc`
             let r = self.device.read_to(w, io_vec)?;

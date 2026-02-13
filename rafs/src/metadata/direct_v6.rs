@@ -526,6 +526,7 @@ impl OndiskInodeWrapper {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[tracing::instrument(skip_all, fields(len=content_len))]
     fn make_chunk_io(
         &self,
         state: &Guard<Arc<DirectMappingState>>,
@@ -785,6 +786,7 @@ impl RafsInode for OndiskInodeWrapper {
         Ok(())
     }
 
+    #[tracing::instrument(skip_all)]
     fn alloc_bio_vecs(
         &self,
         device: &BlobDevice,

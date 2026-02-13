@@ -8,9 +8,10 @@ use std::any::Any;
 use std::cmp::{Eq, PartialEq};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter, Result as FmtResult};
-use std::sync::{atomic::AtomicU64, Arc, Mutex, RwLock};
+use std::sync::{atomic::AtomicU64, Arc, Mutex, OnceLock, RwLock};
 use std::time::SystemTime;
 
+use opentelemetry::trace::TraceContextExt;
 use serde::Serialize;
 use serde_json::{error::Error, value::Value};
 use thiserror::Error;
@@ -257,6 +258,46 @@ macro_rules! event_tracer {
             }
         }
     };
+}
+
+static ROOT_TRACING_SPAN: OnceLock<Option<(tracing::span::Id, opentelemetry::trace::SpanContext)>> =
+    OnceLock::new();
+
+pub fn set_root_span(span: &tracing::Span) {
+    use tracing_opentelemetry::OpenTelemetrySpanExt;
+    if let Some(id) = span.id() {
+        let ctx = span.context().span().span_context().clone();
+        ROOT_TRACING_SPAN
+            .set(Some((id, ctx)))
+            .expect("root span to be set")
+    }
+}
+
+pub fn root_span_id() -> Option<tracing::span::Id> {
+    ROOT_TRACING_SPAN
+        .get()
+        .and_then(|s| s.as_ref().map(|(id, _)| id.clone()))
+}
+
+pub fn root_span_ctx() -> Option<opentelemetry::trace::SpanContext> {
+    ROOT_TRACING_SPAN
+        .get()
+        .and_then(|s| s.as_ref().map(|(_, cx)| cx.clone()))
+}
+
+pub fn current_span_ctx() -> Option<opentelemetry::trace::SpanContext> {
+    use tracing_opentelemetry::OpenTelemetrySpanExt;
+
+    let span = tracing::Span::current();
+    if span.is_disabled() {
+        root_span_ctx()
+    } else {
+        Some(span.context().span().span_context().clone())
+    }
+}
+
+pub fn current_span_id() -> Option<tracing::span::Id> {
+    tracing::Span::current().id().or_else(root_span_id)
 }
 
 #[cfg(test)]

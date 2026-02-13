@@ -127,6 +127,7 @@ pub fn compress(src: &[u8], algorithm: Algorithm) -> Result<(Cow<'_, [u8]>, bool
 
 /// Decompress a source slice or file stream into destination slice, with provided compression algorithm.
 /// Use the file as decompress source if provided.
+#[tracing::instrument(skip_all, fields(len=src.len()))]
 pub fn decompress(src: &[u8], dst: &mut [u8], algorithm: Algorithm) -> Result<usize> {
     match algorithm {
         Algorithm::None => {

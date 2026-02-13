@@ -14,9 +14,11 @@ use nydus_api::BuildTimeInfo;
 pub use logger::{log_level_to_verbosity, setup_logging};
 pub use nydus_service::*;
 pub use signal::register_signal_handler;
+pub use trace::setup_tracing;
 
 mod logger;
 mod signal;
+mod trace;
 
 /// Helper to access commandline options.
 pub struct SubCmdArgs<'a> {

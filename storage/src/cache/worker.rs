@@ -15,6 +15,7 @@ use nydus_utils::metrics::{BlobcacheMetrics, Metric};
 use nydus_utils::mpmc::Channel;
 use tokio::runtime::Runtime;
 use tokio::sync::Semaphore;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::cache::{BlobCache, BlobIoRange};
 use crate::factory::ASYNC_RUNTIME;
@@ -208,7 +209,9 @@ impl AsyncWorkerMgr {
                         .fetch_add(1, Ordering::Relaxed);
 
                     with_runtime(|rt| {
-                        rt.block_on(Self::handle_prefetch_requests(mgr2.clone(), rt));
+                        let mgr2 = mgr2.clone();
+
+                        rt.block_on(Self::handle_prefetch_requests(mgr2, rt));
                     });
 
                     mgr2.metrics
@@ -255,7 +258,16 @@ impl AsyncWorkerMgr {
                         .await
                         .unwrap();
                     if blob_cache.is_prefetch_active() {
+                        let current = nydus_utils::trace::current_span_ctx();
                         rt.spawn_blocking(move || {
+                            let root = nydus_utils::trace::root_span_id();
+                            let span =
+                                tracing::info_span!(parent: root, "handle_blob_prefetch_request");
+                            if let Some(current) = current {
+                                span.add_link(current);
+                            }
+                            let _guard = span.enter();
+
                             let _ = Self::handle_blob_prefetch_request(
                                 mgr2.clone(),
                                 blob_cache,
@@ -273,7 +285,16 @@ impl AsyncWorkerMgr {
                         .unwrap();
 
                     if blob_cache.is_prefetch_active() {
+                        let current = nydus_utils::trace::current_span_ctx();
                         rt.spawn_blocking(move || {
+                            let root = nydus_utils::trace::root_span_id();
+                            let span =
+                                tracing::info_span!(parent: root, "handle_fs_prefetch_request");
+                            if let Some(current) = current {
+                                span.add_link(current);
+                            }
+                            let _guard = span.enter();
+
                             let _ = Self::handle_fs_prefetch_request(
                                 mgr2.clone(),
                                 blob_cache,

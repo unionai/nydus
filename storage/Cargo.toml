@@ -45,6 +45,9 @@ tokio = { version = "1.19.0", features = [
     "sync",
     "time",
 ] }
+tracing = "0.1"
+tracing-opentelemetry = "0.32.1"
+opentelemetry = { version = "0.31.0", features=["trace"]}
 url = { version = "2.1.1", optional = true }
 vm-memory = { workspace = true }
 vmm-sys-util = { workspace = true }
