@@ -15,7 +15,6 @@ use nydus_utils::metrics::{BlobcacheMetrics, Metric};
 use nydus_utils::mpmc::Channel;
 use tokio::runtime::Runtime;
 use tokio::sync::Semaphore;
-use tracing::Instrument;
 
 use crate::cache::{BlobCache, BlobIoRange};
 use crate::factory::ASYNC_RUNTIME;
@@ -211,10 +210,12 @@ impl AsyncWorkerMgr {
                     with_runtime(|rt| {
                         let current = nydus_utils::trace::current_span();
                         let span = tracing::info_span!(parent: current, "handle_prefetch_requests");
+                        let mgr2 = mgr2.clone();
 
-                        rt.block_on(
-                            Self::handle_prefetch_requests(mgr2.clone(), rt).instrument(span),
-                        );
+                        rt.block_on(async move {
+                            let _ = span.enter();
+                            Self::handle_prefetch_requests(mgr2, rt).await
+                        });
                     });
 
                     mgr2.metrics

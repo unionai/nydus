@@ -26,6 +26,7 @@ use nydus_utils::crypt::{self, Cipher, CipherContext};
 use nydus_utils::metrics::{BlobcacheMetrics, Metric};
 use nydus_utils::{compress, digest, round_up_usize, DelayType, Delayer, FileRangeReader};
 use tokio::runtime::Runtime;
+use tracing::{info_span, instrument};
 
 use crate::backend::BlobReader;
 use crate::cache::state::ChunkMap;
@@ -81,7 +82,7 @@ impl FileCacheMeta {
             if let Some(r) = runtime {
                 r.as_ref().spawn_blocking(move || {
                     let current = nydus_utils::trace::current_span();
-                    let _span = tracing::info_span!(parent: current, "read_meta").entered();
+                    let _span = info_span!(parent: current, "read_meta").entered();
 
                     let mut retry = 0;
                     let mut delayer = Delayer::new(
@@ -251,7 +252,11 @@ impl FileCacheEntry {
         let cas_mgr = self.cas_mgr.clone();
 
         metrics.buffered_backend_size.add(buffer.size() as u64);
+
+        let current = nydus_utils::trace::current_span();
         self.runtime.spawn_blocking(move || {
+            let _span = info_span!(parent: current, "delay_persist_chunk_data").entered();
+
             metrics.buffered_backend_size.sub(buffer.size() as u64);
             let mut t_buf;
             let buf = if !is_raw_data && is_cache_encrypted {
@@ -333,6 +338,7 @@ impl FileCacheEntry {
         }
     }
 
+    #[instrument(skip_all, fields(len=buffer.len()))]
     fn persist_cached_data(file: &Arc<File>, offset: u64, buffer: &[u8]) -> Result<()> {
         let fd = file.as_raw_fd();
 
@@ -780,6 +786,7 @@ impl BlobCache for FileCacheEntry {
         Ok(total_size)
     }
 
+    #[instrument(name = "BlobCache::read", skip_all)]
     fn read(&self, iovec: &mut BlobIoVec, buffers: &[FileVolatileSlice]) -> Result<usize> {
         self.metrics.total.inc();
         self.workers.consume_prefetch_budget(iovec.size());
@@ -900,6 +907,7 @@ impl BlobObject for FileCacheEntry {
 }
 
 impl FileCacheEntry {
+    #[instrument(skip_all)]
     fn do_fetch_chunks(&self, chunks: &[Arc<dyn BlobChunkInfo>], prefetch: bool) -> Result<()> {
         // Validate input parameters.
         assert!(!chunks.is_empty());
@@ -949,6 +957,9 @@ impl FileCacheEntry {
                 prefetch,
             ) {
                 Ok(mut bufs) => {
+                    let _span =
+                        info_span!("persist_chunks", count = end_idx - start_idx + 1).entered();
+
                     if self.is_raw_data {
                         let res = Self::persist_cached_data(
                             &self.file,
@@ -1046,6 +1057,7 @@ impl FileCacheEntry {
     //   request.
     // - Optionally there may be some prefetch/read amplify requests following the user io request.
     // - The optional prefetch/read amplify requests may be silently dropped.
+    #[instrument(skip_all)]
     fn read_iter(&self, bios: &mut [BlobIoDesc], buffers: &[FileVolatileSlice]) -> Result<usize> {
         // Merge requests with continuous blob addresses.
         let requests = self
@@ -1076,6 +1088,7 @@ impl FileCacheEntry {
         Ok(total_read)
     }
 
+    #[instrument(skip_all)]
     fn dispatch_one_range(
         &self,
         req: &BlobIoRange,
@@ -1201,6 +1214,7 @@ impl FileCacheEntry {
         Ok(total_read)
     }
 
+    #[instrument(skip_all)]
     fn dispatch_backend(&self, mem_cursor: &mut MemSliceCursor, r: &Region) -> Result<usize> {
         let mut region = r;
         debug!(
