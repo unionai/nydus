@@ -17,7 +17,6 @@ use reqwest::blocking::Response;
 pub use reqwest::header::HeaderMap;
 use reqwest::header::{HeaderValue, CONTENT_LENGTH};
 use reqwest::{Method, StatusCode};
-use tracing::instrument;
 use url::{ParseError, Url};
 
 use nydus_api::RegistryConfig;
@@ -811,7 +810,6 @@ impl BlobReader for RegistryReader {
         })
     }
 
-    #[instrument(skip(self, buf), fields(blob_id = self.blob_id, len=buf.len()))]
     fn try_read(&self, buf: &mut [u8], offset: u64) -> BackendResult<usize> {
         self.first.handle_force(&mut || -> BackendResult<usize> {
             self._try_read(buf, offset, true)
@@ -980,7 +978,6 @@ impl BlobBackend for Registry {
         &self.metrics
     }
 
-    #[instrument(skip(self))]
     fn get_reader(&self, blob_id: &str) -> BackendResult<Arc<dyn BlobReader>> {
         Ok(Arc::new(RegistryReader {
             blob_id: blob_id.to_owned(),

@@ -37,7 +37,6 @@ use mio::Waker;
 use nix::sys::stat::{major, minor};
 use nydus_api::BuildTimeInfo;
 use serde::Serialize;
-use tracing::info_span;
 
 use crate::daemon::{
     DaemonState, DaemonStateMachineContext, DaemonStateMachineInput, DaemonStateMachineSubscriber,
@@ -462,9 +461,6 @@ impl FusedevDaemon {
         let thread = thread::Builder::new()
             .name("fuse_server".to_string())
             .spawn(move || {
-                let current = nydus_utils::trace::current_span();
-                let _span = info_span!(parent: current, "fuse_server").entered();
-
                 if let Err(_err) = s.svc_loop(&inflight_op) {
                     // Notify the daemon controller that one working thread has exited.
                     if let Err(err) = waker.wake() {
