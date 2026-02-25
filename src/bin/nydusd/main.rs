@@ -19,7 +19,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use nix::sys::signal;
 use rlimit::Resource;
 
-use nydus::{dump_program_info, get_build_time_info, setup_logging, setup_tracing, SubCmdArgs};
+use nydus::{dump_program_info, get_build_time_info, setup_logging, SubCmdArgs};
 use nydus_api::{BuildTimeInfo, ConfigV2};
 use nydus_service::daemon::DaemonController;
 use nydus_service::{
@@ -728,7 +728,6 @@ mod nbd {
 }
 
 extern "C" fn sig_exit(_sig: std::os::raw::c_int) {
-    info!("Exit signal received, shutting down");
     DAEMON_CONTROLLER.notify_shutdown();
 }
 
@@ -751,16 +750,6 @@ fn main() -> Result<()> {
         .map_err(|e| einval!(format!("Invalid log rotation size: {}", e)))?;
 
     setup_logging(logging_file, level, rotation_size)?;
-    let tracer_provider = std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT")
-        .ok()
-        .map(|_| setup_tracing("nydusd".to_string()))
-        .transpose()?;
-
-    // Start a root span
-    let root_span = tracing::info_span!("root");
-    nydus_utils::trace::ROOT_TRACING_SPAN
-        .set(root_span.id())
-        .expect("setting root tracing span");
 
     // Initialize and run the daemon controller event loop.
     nydus::register_signal_handler(signal::SIGINT, sig_exit);
@@ -768,8 +757,6 @@ fn main() -> Result<()> {
 
     dump_program_info();
     handle_rlimit_nofile_option(&args, "rlimit-nofile")?;
-
-    let root_guard = root_span.entered();
 
     #[cfg(feature = "dedup")]
     if let Some(db) = args.get_one::<String>("dedup-db") {
@@ -829,15 +816,6 @@ fn main() -> Result<()> {
     api_controller.stop();
     DAEMON_CONTROLLER.set_singleton_mode(false);
     DAEMON_CONTROLLER.shutdown();
-
-    // Close the root span before the shutdown
-    drop(root_guard);
-
-    if let Some(tracer_provider) = tracer_provider {
-        tracer_provider
-            .shutdown()
-            .map_err(|e| eother!(format!("failed to shutdown tracer provider: {e}")))?;
-    }
 
     Ok(())
 }

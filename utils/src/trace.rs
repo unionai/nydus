@@ -8,7 +8,7 @@ use std::any::Any;
 use std::cmp::{Eq, PartialEq};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter, Result as FmtResult};
-use std::sync::{atomic::AtomicU64, Arc, Mutex, OnceLock, RwLock};
+use std::sync::{atomic::AtomicU64, Arc, Mutex, RwLock};
 use std::time::SystemTime;
 
 use serde::Serialize;
@@ -257,14 +257,6 @@ macro_rules! event_tracer {
             }
         }
     };
-}
-
-pub static ROOT_TRACING_SPAN: OnceLock<Option<tracing::span::Id>> = OnceLock::new();
-
-pub fn current_span() -> Option<tracing::span::Id> {
-    let span = tracing::Span::current();
-    span.id()
-        .or_else(|| ROOT_TRACING_SPAN.get().cloned().flatten())
 }
 
 #[cfg(test)]

@@ -14,7 +14,6 @@ use std::sync::{Arc, RwLock};
 
 use fuse_backend_rs::file_buf::FileVolatileSlice;
 use nix::sys::uio;
-use tracing::instrument;
 
 use nydus_api::LocalFsConfig;
 use nydus_utils::metrics::BackendMetrics;
@@ -60,7 +59,6 @@ impl BlobReader for LocalFsEntry {
         })
     }
 
-    #[instrument(skip(self, buf), fields(blob_id = self.id, len=buf.len()))]
     fn try_read(&self, buf: &mut [u8], offset: u64) -> BackendResult<usize> {
         uio::pread(self.file.as_raw_fd(), buf, offset as i64).map_err(|e| {
             let msg = format!("failed to read data from blob {}, {}", self.id, e);
@@ -199,7 +197,6 @@ impl BlobBackend for LocalFs {
         &self.metrics
     }
 
-    #[instrument(skip(self))]
     fn get_reader(&self, blob_id: &str) -> BackendResult<Arc<dyn BlobReader>> {
         self.get_blob(blob_id).map_err(|e| e.into())
     }
