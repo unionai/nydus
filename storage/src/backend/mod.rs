@@ -73,6 +73,28 @@ pub enum BackendError {
     HttpProxy(self::http_proxy::HttpProxyError),
 }
 
+impl BackendError {
+    /// Returns true if the request found its connection shut down: the backend's filesystem was
+    /// unmounted, so every later request fails the same way and a retry only delays the error.
+    pub fn is_disconnected(&self) -> bool {
+        match self {
+            #[cfg(feature = "backend-registry")]
+            BackendError::Registry(self::registry::RegistryError::Request(
+                self::connection::ConnectionError::Disconnected,
+            )) => true,
+            #[cfg(any(feature = "backend-oss", feature = "backend-s3"))]
+            BackendError::ObjectStorage(self::object_storage::ObjectStorageError::Request(
+                self::connection::ConnectionError::Disconnected,
+            )) => true,
+            #[cfg(feature = "backend-http-proxy")]
+            BackendError::HttpProxy(self::http_proxy::HttpProxyError::RemoteRequest(
+                self::connection::ConnectionError::Disconnected,
+            )) => true,
+            _ => false,
+        }
+    }
+}
+
 impl fmt::Display for BackendError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -128,7 +150,9 @@ pub trait BlobReader: Send + Sync {
                     return Ok(size);
                 }
                 Err(err) => {
-                    if retry_count > 0 {
+                    // A shut-down connection fails every retry too, so retrying it only holds
+                    // the caller (and any lock it holds) through the backoff.
+                    if retry_count > 0 && !err.is_disconnected() {
                         warn!(
                             "Read from backend failed: {:?}, retry count {}",
                             err, retry_count
@@ -272,5 +296,54 @@ impl Read for BlobBufReader {
         self.len -= sz;
 
         Ok(sz)
+    }
+}
+
+#[cfg(all(test, feature = "backend-registry"))]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct DisconnectedReader {
+        metrics: Arc<BackendMetrics>,
+        attempts: AtomicUsize,
+    }
+
+    impl BlobReader for DisconnectedReader {
+        fn blob_size(&self) -> BackendResult<u64> {
+            Ok(0)
+        }
+
+        fn try_read(&self, _buf: &mut [u8], _offset: u64) -> BackendResult<usize> {
+            self.attempts.fetch_add(1, Ordering::SeqCst);
+            Err(BackendError::Registry(
+                self::registry::RegistryError::Request(
+                    self::connection::ConnectionError::Disconnected,
+                ),
+            ))
+        }
+
+        fn metrics(&self) -> &BackendMetrics {
+            &self.metrics
+        }
+
+        fn retry_limit(&self) -> u8 {
+            2
+        }
+    }
+
+    #[test]
+    fn test_read_does_not_retry_a_shut_down_connection() {
+        let reader = DisconnectedReader {
+            metrics: BackendMetrics::new("test-read-disconnected", "test"),
+            attempts: AtomicUsize::new(0),
+        };
+
+        let mut buf = [0u8; 16];
+        let err = reader.read(&mut buf, 0).unwrap_err();
+
+        assert!(err.is_disconnected());
+        assert_eq!(reader.attempts.load(Ordering::SeqCst), 1);
+        assert!(!BackendError::Unsupported("test".to_string()).is_disconnected());
     }
 }
