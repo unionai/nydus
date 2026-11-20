@@ -536,12 +536,13 @@ impl Node {
         let encrypted = blob_ctx.blob_cipher != crypt::Algorithm::None;
         let mut dumped_size = None;
 
-        if ctx.blob_batch_generator.is_some()
-            && self.inode.child_count() == 1
-            && d_size < ctx.batch_size / 2
-        {
+        let batch_gen = ctx
+            .blob_batch_generator
+            .as_ref()
+            .filter(|_| self.inode.child_count() == 1 && d_size < ctx.batch_size / 2);
+        if let Some(batch_gen) = batch_gen {
             // This chunk will be added into a batch chunk.
-            let mut batch = ctx.blob_batch_generator.as_ref().unwrap().lock().unwrap();
+            let mut batch = batch_gen.lock().unwrap();
 
             if batch.chunk_data_buf_len() as u32 + d_size < ctx.batch_size {
                 // Add into current batch chunk directly.

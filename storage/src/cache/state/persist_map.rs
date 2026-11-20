@@ -10,7 +10,6 @@ use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, AtomicU8, Ordering};
 
-use nix::NixPath;
 use nydus_utils::div_round_up;
 use nydus_utils::filemap::FileMapState;
 
@@ -67,7 +66,7 @@ impl PersistMap {
         let dir = filename
             .parent()
             .map(|d| {
-                if d.is_empty() {
+                if d.as_os_str().is_empty() {
                     PathBuf::from(".")
                 } else {
                     d.into()

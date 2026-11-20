@@ -38,8 +38,16 @@ jobs:
         cargo miri setup
     - name: Unit Test with Miri
       run: |
-        CARGO_HOME=${HOME}/.cargo
-        CARGO_BIN=$(which cargo)
+        # `tee` swallowed miri's exit status, and `grep 'Undefined Behavior'` succeeded when it
+        # found UB, so the step didn't reflect the test run (same fix as upstream #2200).
+        set -o pipefail
         RUSTUP_BIN=$(which rustup)
-        sudo -E RUSTUP=${RUSTUP_BIN} make miri-ut-nextest 2>&1 | tee miri-ut.log
-        grep -C 2 'Undefined Behavior' miri-ut.log
+        # The tests need root. Pass the toolchain environment explicitly: the runner's sudo
+        # rejects `-E`, and without it root finds neither the nightly toolchain nor nextest.
+        sudo env "PATH=${PATH}" "HOME=${HOME}" \
+          "RUSTUP_HOME=${RUSTUP_HOME:-${HOME}/.rustup}" "CARGO_HOME=${CARGO_HOME:-${HOME}/.cargo}" \
+          "RUSTUP=${RUSTUP_BIN}" make miri-ut-nextest 2>&1 | tee miri-ut.log
+        if grep -q 'error: Undefined Behavior' miri-ut.log; then
+          echo "::error::Miri reported undefined behavior; see the log above."
+          exit 1
+        fi
