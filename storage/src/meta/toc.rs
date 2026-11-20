@@ -720,7 +720,9 @@ impl TocLocation {
     }
 
     fn validate(&self) -> Result<()> {
-        if !self.auto_detect && (!(512..=0x10000).contains(&self.size) || self.size % 128 != 0) {
+        if !self.auto_detect
+            && (!(512..=0x10000).contains(&self.size) || !self.size.is_multiple_of(128))
+        {
             return Err(eother!(format!("invalid size {} of blob ToC", self.size)));
         }
 
@@ -826,7 +828,6 @@ mod tests {
         digest.data[0] = 0;
         let location = TocLocation::with_digest(9010, 1024, digest);
         assert!(TocEntryList::read_from_blob::<fs::File>(blob.as_ref(), None, &location).is_err());
-        digest.data[0] = 79u8;
 
         let location = TocLocation::new(9000, 1024);
         assert!(TocEntryList::read_from_blob::<fs::File>(blob.as_ref(), None, &location).is_err());
