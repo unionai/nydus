@@ -40,7 +40,7 @@ pub enum RegistryError {
     Url(String, ParseError),
     Request(ConnectionError),
     Scheme(String),
-    Transport(reqwest::Error),
+    Transport(std::io::Error),
 }
 
 impl fmt::Display for RegistryError {
@@ -765,8 +765,18 @@ impl RegistryReader {
             }
         }
 
+        let status = resp.status();
+        if !status.is_success() {
+            return Err(RegistryError::Request(ConnectionError::ErrorWithMsg(
+                format!("unexpected HTTP {status} response to Range {range}"),
+            )));
+        }
         resp.copy_to(&mut buf)
-            .map_err(RegistryError::Transport)
+            .map_err(|e| {
+                RegistryError::Transport(std::io::Error::other(format!(
+                    "HTTP {status} response to Range {range}; copying blob body failed: {e}"
+                )))
+            })
             .map(|size| size as usize)
     }
 }
@@ -1075,6 +1085,52 @@ mod tests {
                 source: Some(Box::new(NestedErr { msg, source: None })),
             })),
         }
+    }
+
+    #[test]
+    fn test_read_rejects_non_success_response_from_cached_redirect() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+
+        // A blob server that answers every request with a 503 and a short body.
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { break };
+                let mut req = [0u8; 4096];
+                let _ = stream.read(&mut req);
+                let _ = stream.write_all(
+                    b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 4\r\nConnection: close\r\n\r\nbusy",
+                );
+            }
+        });
+
+        let blob_id = "blob";
+        let config = RegistryConfig {
+            scheme: "http".to_string(),
+            host: addr.to_string(),
+            repo: "test".to_string(),
+            retry_limit: 0,
+            ..Default::default()
+        };
+        let registry = Registry::new(&config, Some(blob_id)).unwrap();
+        // Reads of a blob with a cached redirect go straight to the redirected URL.
+        registry
+            .state
+            .cached_redirect
+            .set(blob_id.to_string(), format!("http://{addr}/redirected"));
+        let reader = registry.get_reader(blob_id).unwrap();
+
+        // The error body must not be returned as blob data.
+        let mut buf = vec![0u8; 16];
+        let err = reader.read(&mut buf, 0).unwrap_err();
+        assert!(
+            format!("{err}")
+                .contains("unexpected HTTP 503 Service Unavailable response to Range bytes=0-15"),
+            "{err}"
+        );
+        registry.shutdown();
     }
 
     #[test]
