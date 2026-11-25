@@ -36,7 +36,7 @@ use crate::device::{
     BlobObject, BlobPrefetchRequest,
 };
 use crate::meta::{BlobCompressionContextInfo, BlobMetaChunk};
-use crate::utils::{alloc_buf, copyv, readv, MemSliceCursor};
+use crate::utils::{alloc_buf, copyv, readv, AlignedBuf, MemSliceCursor};
 use crate::{StorageError, StorageResult, RAFS_BATCH_SIZE_TO_GAP_SHIFT, RAFS_DEFAULT_CHUNK_SIZE};
 
 const DOWNLOAD_META_RETRY_COUNT: u32 = 5;
@@ -1025,7 +1025,7 @@ impl FileCacheEntry {
         Ok(())
     }
 
-    fn adjust_buffer_for_dio(&self, buf: &mut Vec<u8>) {
+    fn adjust_buffer_for_dio(&self, buf: &mut AlignedBuf) {
         assert_eq!(buf.capacity() % 0x1000, 0);
         if buf.len() != buf.capacity() {
             // Padding with 0 for direct IO.
@@ -1511,7 +1511,7 @@ impl Drop for FileCacheEntry {
 #[allow(dead_code)]
 enum DataBuffer {
     Reuse(ManuallyDrop<Vec<u8>>),
-    Allocated(Vec<u8>),
+    Allocated(AlignedBuf),
 }
 
 impl DataBuffer {
@@ -1539,7 +1539,9 @@ impl DataBuffer {
     /// Make sure it owns the underlying memory buffer.
     fn convert_to_owned_buffer(self) -> Self {
         if let DataBuffer::Reuse(data) = self {
-            DataBuffer::Allocated((*data).to_vec())
+            let mut owned = alloc_buf(data.len());
+            owned.copy_from_slice(&data);
+            DataBuffer::Allocated(owned)
         } else {
             self
         }
@@ -1777,6 +1779,19 @@ mod tests {
         let mut buf2 = buf2.convert_to_owned_buffer();
         buf2.mut_slice()[1] = 0x2;
         assert_eq!(buf1[1], 0x1);
+        assert!(buf2.size() >= buf2.slice().len());
+    }
+
+    #[test]
+    fn test_data_buffer_already_allocated() {
+        // Covers the `else` branch of convert_to_owned_buffer (Allocated passthrough)
+        let mut data = alloc_buf(16);
+        data.fill(0x42);
+        let buf = DataBuffer::Allocated(data);
+        assert_eq!(buf.size(), 4096);
+        let converted = buf.convert_to_owned_buffer();
+        assert_eq!(converted.slice()[0], 0x42);
+        assert!(converted.size() >= 16);
     }
 
     #[test]
