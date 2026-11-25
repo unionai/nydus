@@ -40,7 +40,7 @@ pub enum RegistryError {
     Url(String, ParseError),
     Request(ConnectionError),
     Scheme(String),
-    Transport(reqwest::Error),
+    Transport(std::io::Error),
 }
 
 impl fmt::Display for RegistryError {
@@ -200,6 +200,9 @@ struct RegistryState {
     auth: Option<String>,
     // Retry limit for read operation
     retry_limit: u8,
+    // When true, skip TLS certificate verification AND allow HTTPS-to-HTTP fallback.
+    // When false (default), TLS errors propagate as-is without falling back to HTTP.
+    skip_verify: bool,
     // Scheme specified for blob server
     blob_url_scheme: String,
     // Replace registry redirected url host with the given host
@@ -239,6 +242,9 @@ impl RegistryState {
     }
 
     fn needs_fallback_http(&self, e: &dyn Error) -> bool {
+        if !self.skip_verify {
+            return false;
+        }
         match e.source() {
             Some(err) => match err.source() {
                 Some(err) => {
@@ -759,8 +765,18 @@ impl RegistryReader {
             }
         }
 
+        let status = resp.status();
+        if !status.is_success() {
+            return Err(RegistryError::Request(ConnectionError::ErrorWithMsg(
+                format!("unexpected HTTP {status} response to Range {range}"),
+            )));
+        }
         resp.copy_to(&mut buf)
-            .map_err(RegistryError::Transport)
+            .map_err(|e| {
+                RegistryError::Transport(std::io::Error::other(format!(
+                    "HTTP {status} response to Range {range}; copying blob body failed: {e}"
+                )))
+            })
             .map(|size| size as usize)
     }
 }
@@ -866,6 +882,7 @@ impl Registry {
             auth,
             cached_auth,
             retry_limit,
+            skip_verify: config.skip_verify,
             blob_url_scheme: config.blob_url_scheme.clone(),
             blob_redirected_host: config.blob_redirected_host.clone(),
             cached_auth_using_http_get: HashCache::new(),
@@ -1015,6 +1032,131 @@ mod tests {
     use super::*;
     use http::response;
     use serde_json::json;
+    use std::error::Error as StdError;
+    use std::fmt::{Display, Formatter};
+
+    #[derive(Debug)]
+    struct NestedErr {
+        msg: &'static str,
+        source: Option<Box<dyn StdError + Send + Sync>>,
+    }
+
+    impl Display for NestedErr {
+        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{}", self.msg)
+        }
+    }
+
+    impl StdError for NestedErr {
+        fn source(&self) -> Option<&(dyn StdError + 'static)> {
+            self.source
+                .as_ref()
+                .map(|source| &**source as &(dyn StdError + 'static))
+        }
+    }
+
+    fn create_state(use_https: bool) -> RegistryState {
+        create_state_with_skip_verify(use_https, false)
+    }
+
+    fn create_state_with_skip_verify(use_https: bool, skip_verify: bool) -> RegistryState {
+        RegistryState {
+            scheme: Scheme::new(use_https),
+            host: "example.com".to_string(),
+            repo: "library/test".to_string(),
+            auth: None,
+            retry_limit: 5,
+            skip_verify,
+            blob_url_scheme: "https".to_string(),
+            blob_redirected_host: "blob.example.com".to_string(),
+            cached_auth_using_http_get: Default::default(),
+            cached_auth: Default::default(),
+            cached_redirect: Default::default(),
+            token_expired_at: ArcSwapOption::new(None),
+            cached_bearer_auth: ArcSwapOption::new(None),
+        }
+    }
+
+    fn nested_error(msg: &'static str) -> NestedErr {
+        NestedErr {
+            msg: "outer",
+            source: Some(Box::new(NestedErr {
+                msg: "middle",
+                source: Some(Box::new(NestedErr { msg, source: None })),
+            })),
+        }
+    }
+
+    #[test]
+    fn test_read_rejects_non_success_response_from_cached_redirect() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+
+        // A blob server that answers every request with a 503 and a short body.
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { break };
+                let mut req = [0u8; 4096];
+                let _ = stream.read(&mut req);
+                let _ = stream.write_all(
+                    b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 4\r\nConnection: close\r\n\r\nbusy",
+                );
+            }
+        });
+
+        let blob_id = "blob";
+        let config = RegistryConfig {
+            scheme: "http".to_string(),
+            host: addr.to_string(),
+            repo: "test".to_string(),
+            retry_limit: 0,
+            ..Default::default()
+        };
+        let registry = Registry::new(&config, Some(blob_id)).unwrap();
+        // Reads of a blob with a cached redirect go straight to the redirected URL.
+        registry
+            .state
+            .cached_redirect
+            .set(blob_id.to_string(), format!("http://{addr}/redirected"));
+        let reader = registry.get_reader(blob_id).unwrap();
+
+        // The error body must not be returned as blob data.
+        let mut buf = vec![0u8; 16];
+        let err = reader.read(&mut buf, 0).unwrap_err();
+        assert!(
+            format!("{err}")
+                .contains("unexpected HTTP 503 Service Unavailable response to Range bytes=0-15"),
+            "{err}"
+        );
+        registry.shutdown();
+    }
+
+    #[test]
+    fn test_no_fallback_http_by_default() {
+        // With skip_verify=false (default), never fall back to http.
+        let state = create_state(true);
+        assert_eq!(state.scheme.to_string(), "https");
+        assert!(!state.needs_fallback_http(&nested_error("wrong version number")));
+        assert!(!state.needs_fallback_http(&nested_error("connection refused")));
+        assert!(!state.needs_fallback_http(&nested_error("SSL routines")));
+    }
+
+    #[test]
+    fn test_scheme_and_fallback_http() {
+        // With skip_verify=true and https, TLS errors trigger fallback.
+        let state = create_state_with_skip_verify(true, true);
+        assert_eq!(state.scheme.to_string(), "https");
+        assert!(state.needs_fallback_http(&nested_error("wrong version number")));
+        assert!(state.needs_fallback_http(&nested_error("SSL routines")));
+        assert!(!state.needs_fallback_http(&nested_error("permission denied")));
+
+        // With skip_verify=true and http, no fallback needed (already http).
+        let state = create_state_with_skip_verify(false, true);
+        assert_eq!(state.scheme.to_string(), "http");
+        assert!(!state.needs_fallback_http(&nested_error("wrong version number")));
+    }
 
     #[test]
     fn test_string_cache() {
@@ -1049,6 +1191,7 @@ mod tests {
             repo: "nydus".to_string(),
             auth: None,
             retry_limit: 5,
+            skip_verify: false,
             blob_url_scheme: "https".to_string(),
             blob_redirected_host: "oss.alibaba-inc.com".to_string(),
             cached_auth_using_http_get: Default::default(),

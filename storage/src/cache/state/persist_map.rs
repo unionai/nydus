@@ -10,7 +10,6 @@ use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, AtomicU8, Ordering};
 
-use nix::NixPath;
 use nydus_utils::div_round_up;
 use nydus_utils::filemap::FileMapState;
 
@@ -63,11 +62,20 @@ impl PersistMap {
             return Err(einval!("chunk count should be greater than 0"));
         }
 
+        // Miri supports neither O_TMPFILE nor shared file mappings.
+        if cfg!(miri) {
+            return if filename.as_ref().exists() {
+                Self::existing(filename, chunk_count)
+            } else {
+                Self::transient(chunk_count)
+            };
+        }
+
         let filename = filename.as_ref();
         let dir = filename
             .parent()
             .map(|d| {
-                if d.is_empty() {
+                if d.as_os_str().is_empty() {
                     PathBuf::from(".")
                 } else {
                     d.into()

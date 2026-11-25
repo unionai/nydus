@@ -72,6 +72,7 @@ impl FileMapState {
         } else {
             libc::PROT_READ
         };
+        #[cfg(not(miri))]
         let base = unsafe {
             libc::mmap(
                 std::ptr::null_mut(),
@@ -82,6 +83,11 @@ impl FileMapState {
                 offset,
             )
         } as *const u8;
+        #[cfg(miri)]
+        let base = {
+            let _ = (prot, flags);
+            unsafe { Self::map_copy(fd, offset, size) }
+        };
         if base as *mut core::ffi::c_void == libc::MAP_FAILED {
             return Err(last_error!(
                 "failed to memory map file region into current process"
@@ -100,6 +106,36 @@ impl FileMapState {
             end,
             size,
         })
+    }
+
+    /// Miri has no file-backed mappings, so copy the file's bytes into an anonymous one. Writes
+    /// through the mapping don't reach the file.
+    #[cfg(miri)]
+    unsafe fn map_copy(fd: RawFd, offset: libc::off_t, size: usize) -> *const u8 {
+        let base = libc::mmap(
+            std::ptr::null_mut(),
+            size,
+            libc::PROT_READ | libc::PROT_WRITE,
+            libc::MAP_PRIVATE | libc::MAP_ANONYMOUS,
+            -1,
+            0,
+        );
+        if fd >= 0 && base != libc::MAP_FAILED {
+            let mut done = 0;
+            while done < size {
+                let n = libc::pread(
+                    fd,
+                    base.add(done),
+                    size - done,
+                    offset + done as libc::off_t,
+                );
+                if n <= 0 {
+                    break;
+                }
+                done += n as usize;
+            }
+        }
+        base as *const u8
     }
 
     /// Get size of mapped region.

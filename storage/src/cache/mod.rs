@@ -32,7 +32,7 @@ use crate::device::{
     BlobChunkInfo, BlobInfo, BlobIoDesc, BlobIoRange, BlobIoVec, BlobObject, BlobPrefetchRequest,
 };
 use crate::meta::BlobCompressionContextInfo;
-use crate::utils::{alloc_buf, check_crc, check_hash};
+use crate::utils::{alloc_buf, check_crc, check_hash, AlignedBuf};
 use crate::{StorageResult, RAFS_MAX_CHUNK_SIZE};
 
 mod cachedfile;
@@ -293,7 +293,7 @@ pub trait BlobCache: Send + Sync {
         &self,
         chunk: &dyn BlobChunkInfo,
         buffer: &mut [u8],
-    ) -> Result<Option<Vec<u8>>> {
+    ) -> Result<Option<AlignedBuf>> {
         let start = Instant::now();
         let offset = chunk.compressed_offset();
         let mut c_buf = None;
@@ -418,8 +418,8 @@ pub struct ChunkDecompressState<'a, 'b> {
     zran_idx: u32,
     cache: &'a dyn BlobCache,
     chunks: Vec<&'b dyn BlobChunkInfo>,
-    c_buf: Vec<u8>,
-    d_buf: Vec<u8>,
+    c_buf: AlignedBuf,
+    d_buf: AlignedBuf,
 }
 
 impl<'a, 'b> ChunkDecompressState<'a, 'b> {
@@ -427,7 +427,7 @@ impl<'a, 'b> ChunkDecompressState<'a, 'b> {
         blob_offset: u64,
         cache: &'a dyn BlobCache,
         chunks: Vec<&'b dyn BlobChunkInfo>,
-        c_buf: Vec<u8>,
+        c_buf: AlignedBuf,
     ) -> Self {
         ChunkDecompressState {
             blob_offset,
@@ -437,7 +437,7 @@ impl<'a, 'b> ChunkDecompressState<'a, 'b> {
             cache,
             chunks,
             c_buf,
-            d_buf: Vec::new(),
+            d_buf: AlignedBuf::default(),
         }
     }
 
@@ -521,7 +521,7 @@ impl<'a, 'b> ChunkDecompressState<'a, 'b> {
         Ok(())
     }
 
-    fn next_batch(&mut self, chunk: &dyn BlobChunkInfo) -> Result<Vec<u8>> {
+    fn next_batch(&mut self, chunk: &dyn BlobChunkInfo) -> Result<AlignedBuf> {
         // If the chunk is not a batch chunk, decompress it as normal.
         if !chunk.is_batch() {
             return self.next_buf(chunk);
@@ -554,7 +554,7 @@ impl<'a, 'b> ChunkDecompressState<'a, 'b> {
         Ok(buffer)
     }
 
-    fn next_zran(&mut self, chunk: &dyn BlobChunkInfo) -> Result<Vec<u8>> {
+    fn next_zran(&mut self, chunk: &dyn BlobChunkInfo) -> Result<AlignedBuf> {
         let meta = self
             .cache
             .get_blob_meta_info()?
@@ -576,7 +576,7 @@ impl<'a, 'b> ChunkDecompressState<'a, 'b> {
         Ok(buffer)
     }
 
-    fn next_buf(&mut self, chunk: &dyn BlobChunkInfo) -> Result<Vec<u8>> {
+    fn next_buf(&mut self, chunk: &dyn BlobChunkInfo) -> Result<AlignedBuf> {
         let c_offset = chunk.compressed_offset();
         let c_size = chunk.compressed_size();
         let d_size = chunk.uncompressed_size() as usize;
@@ -620,7 +620,7 @@ impl<'a, 'b> ChunkDecompressState<'a, 'b> {
 }
 
 impl Iterator for ChunkDecompressState<'_, '_> {
-    type Item = Result<Vec<u8>>;
+    type Item = Result<AlignedBuf>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.chunk_idx >= self.chunks.len() {

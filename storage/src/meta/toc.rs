@@ -20,7 +20,7 @@ use tar::{EntryType, Header};
 
 use crate::backend::{BlobBufReader, BlobReader};
 use crate::factory::BlobFactory;
-use crate::utils::alloc_buf;
+use crate::utils::{alloc_buf, AlignedBuf};
 
 /// File name for RAFS data chunks.
 pub const TOC_ENTRY_BLOB_RAW: &str = "image.blob";
@@ -418,7 +418,10 @@ impl TocEntryList {
         }
     }
 
-    fn read_toc_header(reader: &dyn BlobReader, location: &TocLocation) -> Result<(Vec<u8>, u64)> {
+    fn read_toc_header(
+        reader: &dyn BlobReader,
+        location: &TocLocation,
+    ) -> Result<(AlignedBuf, u64)> {
         location.validate()?;
         let (offset, size) = if location.auto_detect {
             let blob_size = reader
@@ -720,7 +723,9 @@ impl TocLocation {
     }
 
     fn validate(&self) -> Result<()> {
-        if !self.auto_detect && (!(512..=0x10000).contains(&self.size) || self.size % 128 != 0) {
+        if !self.auto_detect
+            && (!(512..=0x10000).contains(&self.size) || !self.size.is_multiple_of(128))
+        {
             return Err(eother!(format!("invalid size {} of blob ToC", self.size)));
         }
 
@@ -826,7 +831,6 @@ mod tests {
         digest.data[0] = 0;
         let location = TocLocation::with_digest(9010, 1024, digest);
         assert!(TocEntryList::read_from_blob::<fs::File>(blob.as_ref(), None, &location).is_err());
-        digest.data[0] = 79u8;
 
         let location = TocLocation::new(9000, 1024);
         assert!(TocEntryList::read_from_blob::<fs::File>(blob.as_ref(), None, &location).is_err());

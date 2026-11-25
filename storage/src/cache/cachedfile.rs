@@ -17,7 +17,7 @@ use std::ops::Deref;
 use std::os::unix::io::{AsRawFd, RawFd};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use fuse_backend_rs::file_buf::FileVolatileSlice;
 use nix::sys::uio;
@@ -36,17 +36,39 @@ use crate::device::{
     BlobObject, BlobPrefetchRequest,
 };
 use crate::meta::{BlobCompressionContextInfo, BlobMetaChunk};
-use crate::utils::{alloc_buf, copyv, readv, MemSliceCursor};
+use crate::utils::{alloc_buf, copyv, readv, AlignedBuf, MemSliceCursor};
 use crate::{StorageError, StorageResult, RAFS_BATCH_SIZE_TO_GAP_SHIFT, RAFS_DEFAULT_CHUNK_SIZE};
 
 const DOWNLOAD_META_RETRY_COUNT: u32 = 5;
 const DOWNLOAD_META_RETRY_DELAY: u64 = 400;
+const RELOAD_META_COOLDOWN: Duration = Duration::from_secs(5);
 const ENCRYPTION_PAGE_SIZE: usize = 4096;
 
 #[derive(Default, Clone)]
 pub(crate) struct FileCacheMeta {
     has_error: Arc<AtomicBool>,
     meta: Arc<Mutex<Option<Arc<BlobCompressionContextInfo>>>>,
+    // Kept after the background load gives up so later reads can reload the metadata.
+    loader: Option<Arc<FileCacheMetaLoader>>,
+}
+
+struct FileCacheMetaLoader {
+    blob_file: String,
+    blob_info: Arc<BlobInfo>,
+    reader: Option<Arc<dyn BlobReader>>,
+    validation: bool,
+    next_retry: Mutex<Instant>,
+}
+
+impl FileCacheMetaLoader {
+    fn load(&self) -> Result<BlobCompressionContextInfo> {
+        BlobCompressionContextInfo::new(
+            &self.blob_file,
+            &self.blob_info,
+            self.reader.as_ref(),
+            self.validation,
+        )
+    }
 }
 
 impl FileCacheMeta {
@@ -68,15 +90,28 @@ impl FileCacheMeta {
                 Ok(m) => Ok(FileCacheMeta {
                     has_error: Arc::new(AtomicBool::new(false)),
                     meta: Arc::new(Mutex::new(Some(Arc::new(m)))),
+                    loader: None,
                 }),
                 Err(e) => Err(e),
             }
         } else {
+            let loader = Arc::new(FileCacheMetaLoader {
+                blob_file,
+                blob_info,
+                reader,
+                validation,
+                next_retry: Mutex::new(Instant::now()),
+            });
             let meta = FileCacheMeta {
                 has_error: Arc::new(AtomicBool::new(false)),
                 meta: Arc::new(Mutex::new(None)),
+                loader: Some(loader.clone()),
             };
-            let meta1 = meta.clone();
+            // Weak: once the blob cache that wants the metadata is gone (its filesystem
+            // unmounted), the load stops instead of keeping one of the runtime's few blocking
+            // threads, and the meta file's lock, through retries nothing waits for.
+            let slot = Arc::downgrade(&meta.meta);
+            let has_error = Arc::downgrade(&meta.has_error);
 
             if let Some(r) = runtime {
                 r.as_ref().spawn_blocking(move || {
@@ -86,14 +121,14 @@ impl FileCacheMeta {
                         Duration::from_millis(DOWNLOAD_META_RETRY_DELAY),
                     );
                     while retry < DOWNLOAD_META_RETRY_COUNT {
-                        match BlobCompressionContextInfo::new(
-                            &blob_file,
-                            &blob_info,
-                            reader.as_ref(),
-                            validation,
-                        ) {
+                        if slot.strong_count() == 0 {
+                            return;
+                        }
+                        match loader.load() {
                             Ok(m) => {
-                                *meta1.meta.lock().unwrap() = Some(Arc::new(m));
+                                if let Some(slot) = slot.upgrade() {
+                                    *slot.lock().unwrap() = Some(Arc::new(m));
+                                }
                                 return;
                             }
                             Err(e) => {
@@ -104,7 +139,9 @@ impl FileCacheMeta {
                         }
                     }
                     warn!("failed to get blob.meta");
-                    meta1.has_error.store(true, Ordering::Release);
+                    if let Some(has_error) = has_error.upgrade() {
+                        has_error.store(true, Ordering::Release);
+                    }
                 });
             } else {
                 warn!("Want download blob meta asynchronously but no runtime.");
@@ -122,9 +159,39 @@ impl FileCacheMeta {
             }
             drop(meta);
             if self.has_error.load(Ordering::Acquire) {
-                return None;
+                return self.reload_blob_meta();
             }
             std::thread::sleep(Duration::from_millis(2));
+        }
+    }
+
+    // Serialize reloads after background failure, with a fixed cooldown on reload errors.
+    fn reload_blob_meta(&self) -> Option<Arc<BlobCompressionContextInfo>> {
+        let loader = self.loader.as_ref()?;
+        let mut next_retry = match loader.next_retry.try_lock() {
+            Ok(guard) => guard,
+            Err(std::sync::TryLockError::WouldBlock) => return None,
+            Err(std::sync::TryLockError::Poisoned(e)) => {
+                panic!("blob metadata reload lock poisoned: {}", e)
+            }
+        };
+        if let Some(m) = self.meta.lock().unwrap().as_ref() {
+            return Some(m.clone());
+        }
+        if Instant::now() < *next_retry {
+            return None;
+        }
+        match loader.load() {
+            Ok(m) => {
+                let m = Arc::new(m);
+                *self.meta.lock().unwrap() = Some(m.clone());
+                Some(m)
+            }
+            Err(e) => {
+                *next_retry = Instant::now() + RELOAD_META_COOLDOWN;
+                warn!("failed to reload blob.meta, {}", e);
+                None
+            }
         }
     }
 }
@@ -1025,7 +1092,7 @@ impl FileCacheEntry {
         Ok(())
     }
 
-    fn adjust_buffer_for_dio(&self, buf: &mut Vec<u8>) {
+    fn adjust_buffer_for_dio(&self, buf: &mut AlignedBuf) {
         assert_eq!(buf.capacity() % 0x1000, 0);
         if buf.len() != buf.capacity() {
             // Padding with 0 for direct IO.
@@ -1511,7 +1578,7 @@ impl Drop for FileCacheEntry {
 #[allow(dead_code)]
 enum DataBuffer {
     Reuse(ManuallyDrop<Vec<u8>>),
-    Allocated(Vec<u8>),
+    Allocated(AlignedBuf),
 }
 
 impl DataBuffer {
@@ -1539,7 +1606,9 @@ impl DataBuffer {
     /// Make sure it owns the underlying memory buffer.
     fn convert_to_owned_buffer(self) -> Self {
         if let DataBuffer::Reuse(data) = self {
-            DataBuffer::Allocated((*data).to_vec())
+            let mut owned = alloc_buf(data.len());
+            owned.copy_from_slice(&data);
+            DataBuffer::Allocated(owned)
         } else {
             self
         }
@@ -1777,6 +1846,19 @@ mod tests {
         let mut buf2 = buf2.convert_to_owned_buffer();
         buf2.mut_slice()[1] = 0x2;
         assert_eq!(buf1[1], 0x1);
+        assert!(buf2.size() >= buf2.slice().len());
+    }
+
+    #[test]
+    fn test_data_buffer_already_allocated() {
+        // Covers the `else` branch of convert_to_owned_buffer (Allocated passthrough)
+        let mut data = alloc_buf(16);
+        data.fill(0x42);
+        let buf = DataBuffer::Allocated(data);
+        assert_eq!(buf.size(), 4096);
+        let converted = buf.convert_to_owned_buffer();
+        assert_eq!(converted.slice()[0], 0x42);
+        assert!(converted.size() >= 16);
     }
 
     #[test]
@@ -2042,6 +2124,124 @@ mod tests {
             metrics.entries_count.count(),
             5,
             "entries_count should be incremented to 5 after multiple successful updates"
+        );
+    }
+
+    #[test]
+    fn test_file_cache_meta_reloads_after_background_load_failed() {
+        use vmm_sys_util::tempdir::TempDir;
+
+        let root_dir = &std::env::var("CARGO_MANIFEST_DIR").expect("$CARGO_MANIFEST_DIR");
+        let fixture = std::path::PathBuf::from(root_dir).join("../tests/texture/zran/233c72f2b6b698c07021c4da367cfe2dff4f049efbaa885ca0ff760ea297865a.blob.meta");
+        let dir = TempDir::new().unwrap();
+        let path = dir.as_path().join("cached");
+        let mut blob_info = BlobInfo::new(
+            0,
+            "233c72f2b6b698c07021c4da367cfe2dff4f049efbaa885ca0ff760ea297865a".to_string(),
+            0x16c6000,
+            9839040,
+            RAFS_DEFAULT_CHUNK_SIZE as u32,
+            0xa3,
+            BlobFeatures::ALIGNED
+                | BlobFeatures::INLINED_FS_META
+                | BlobFeatures::CHUNK_INFO_V2
+                | BlobFeatures::ZRAN,
+        );
+        blob_info.set_blob_meta_info(0, 0xa1290, 0xa1290, compress::Algorithm::None as u32);
+
+        // Simulate the background loader having exhausted its retries.
+        let file_cache_meta = FileCacheMeta {
+            has_error: Arc::new(AtomicBool::new(true)),
+            meta: Arc::new(Mutex::new(None)),
+            loader: Some(Arc::new(FileCacheMetaLoader {
+                blob_file: path.display().to_string(),
+                blob_info: Arc::new(blob_info),
+                reader: None,
+                validation: false,
+                next_retry: Mutex::new(Instant::now()),
+            })),
+        };
+
+        let started = Instant::now();
+        assert!(file_cache_meta.get_blob_meta().is_none());
+        let loader = file_cache_meta.loader.as_ref().unwrap();
+        let deadline = *loader.next_retry.lock().unwrap();
+        assert!(deadline >= started + RELOAD_META_COOLDOWN);
+        assert!(deadline <= Instant::now() + RELOAD_META_COOLDOWN);
+
+        std::fs::copy(fixture, path.with_extension("blob.meta")).unwrap();
+        // Control the deadline to check cooldown and expiry without sleeping.
+        let deadline = Instant::now() + Duration::from_secs(60);
+        *loader.next_retry.lock().unwrap() = deadline;
+        assert!(file_cache_meta.clone().get_blob_meta().is_none());
+        assert_eq!(*loader.next_retry.lock().unwrap(), deadline);
+        *loader.next_retry.lock().unwrap() = Instant::now();
+
+        let reloaded = file_cache_meta
+            .get_blob_meta()
+            .expect("a later read must reload blob.meta instead of failing forever");
+        assert_eq!(reloaded.state.chunk_info_array.len(), 0xa3);
+        assert!(Arc::ptr_eq(
+            &reloaded,
+            &file_cache_meta.get_blob_meta().unwrap()
+        ));
+    }
+
+    #[test]
+    fn test_background_meta_load_stops_once_its_cache_is_gone() {
+        use crate::meta::tests::DummyBlobReader;
+        use nydus_utils::metrics::BackendMetrics;
+        use std::sync::mpsc::channel;
+        use vmm_sys_util::tempdir::TempDir;
+
+        // One blocking thread, kept busy, so the load is still queued when its cache goes away.
+        let runtime = Arc::new(
+            tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(1)
+                .max_blocking_threads(1)
+                .build()
+                .unwrap(),
+        );
+        let (release, held) = channel::<()>();
+        runtime.spawn_blocking(move || held.recv());
+
+        let dir = TempDir::new().unwrap();
+        let blob_file = dir.as_path().join("blob").display().to_string();
+        let mut blob_info = BlobInfo::new(
+            0,
+            "blob".to_string(),
+            0x16c6000,
+            9839040,
+            RAFS_DEFAULT_CHUNK_SIZE as u32,
+            0xa3,
+            BlobFeatures::ALIGNED | BlobFeatures::INLINED_FS_META | BlobFeatures::CHUNK_INFO_V2,
+        );
+        blob_info.set_blob_meta_info(0, 0xa1290, 0xa1290, compress::Algorithm::None as u32);
+        let empty = vmm_sys_util::tempfile::TempFile::new().unwrap();
+        let reader: Arc<dyn BlobReader> = Arc::new(DummyBlobReader {
+            metrics: BackendMetrics::new("blob", "localfs"),
+            file: empty.into_file(),
+        });
+        let meta = FileCacheMeta::new(
+            blob_file.clone(),
+            Arc::new(blob_info),
+            Some(reader),
+            Some(runtime.clone()),
+            false,
+            false,
+        )
+        .unwrap();
+        drop(meta);
+
+        // The pool runs its queue in order: once this runs, the load before it has finished.
+        let (finished, done) = channel();
+        runtime.spawn_blocking(move || finished.send(()));
+        release.send(()).unwrap();
+        done.recv_timeout(Duration::from_secs(10)).unwrap();
+        // A load would have created the meta file, to download the metadata into it.
+        assert!(
+            !std::path::Path::new(&format!("{}.blob.meta", blob_file)).exists(),
+            "the load ran for a cache that was gone"
         );
     }
 }

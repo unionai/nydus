@@ -31,6 +31,8 @@ pub mod filemap;
 pub mod inode_bitmap;
 pub mod logger;
 pub mod metrics;
+#[cfg(all(miri, target_os = "linux"))]
+mod miri_shims;
 pub mod mpmc;
 pub mod reader;
 pub mod trace;
