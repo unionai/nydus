@@ -446,15 +446,18 @@ impl BlobCompressionContextInfo {
             )));
         }
 
-        let mut filemap = FileMapState::new(file, 0, expected_size, enable_write)?;
+        let filemap = FileMapState::new(file, 0, expected_size, enable_write)?;
         let base = filemap.validate_range(0, expected_size)?;
         let header =
-            filemap.get_mut::<BlobCompressionContextHeader>(aligned_uncompressed_size as usize)?;
+            filemap.get_ref::<BlobCompressionContextHeader>(aligned_uncompressed_size as usize)?;
         if !Self::validate_header(blob_info, header)? {
             if let Some(reader) = reader {
                 let buffer =
                     unsafe { std::slice::from_raw_parts_mut(base as *mut u8, expected_size) };
                 Self::read_metadata(blob_info, reader, buffer)?;
+                // `read_metadata` rewrote the mapped bytes, so borrow the header again.
+                let header = filemap
+                    .get_ref::<BlobCompressionContextHeader>(aligned_uncompressed_size as usize)?;
                 if !Self::validate_header(blob_info, header)? {
                     return Err(enoent!(format!("double check blob_info still invalid",)));
                 }
